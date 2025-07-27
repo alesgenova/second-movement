@@ -74,4 +74,5 @@
 #include "deadline_face.h"
 #include "wordle_face.h"
 #include "rtccount_face.h"
+#include "tunes_face.h"
 // New includes go above this line.
