@@ -177,7 +177,7 @@ static void _display_pin(watch_pin_t* pin) {
 
 void _pin_face_default_loop_handler(movement_event_t event) {
     switch (event.event_type) {
-        case EVENT_MODE_BUTTON_UP: {
+        case EVENT_MODE_BUTTON_DOWN: {
             uint8_t requesting_face = movement_pin_service_get_requesting_face();
             if (requesting_face != PIN_EMPTY_FACE) {
                 movement_move_to_face(requesting_face);
