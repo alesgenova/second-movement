@@ -180,9 +180,9 @@ void _pin_face_default_loop_handler(movement_event_t event) {
         case EVENT_MODE_BUTTON_DOWN: {
             uint8_t requesting_face = movement_pin_service_get_requesting_face();
             if (requesting_face != PIN_EMPTY_FACE) {
-                movement_move_to_face(requesting_face);
+                movement_move_to_page(movement_face_to_page(requesting_face));
             } else {
-                movement_move_to_next_face();
+                movement_move_to_next_page();
             }
             break;
         }
@@ -403,7 +403,7 @@ void _pin_face_validating_transition(movement_event_t event, void* context) {
                         if (state->validation_success) {
                             uint8_t requesting_face = movement_pin_service_get_requesting_face();
                             if (requesting_face != PIN_EMPTY_FACE) {
-                                movement_move_to_face(requesting_face);
+                                movement_move_to_page(movement_face_to_page(requesting_face));
                             } else {
                                 state->digit_index = 0;
                                 state->animation_tick = 0;
