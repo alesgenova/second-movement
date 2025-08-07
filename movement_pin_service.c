@@ -104,7 +104,7 @@ bool movement_pin_service_loop(movement_event_t event, uint8_t face_index, char*
             break;
         case EVENT_ALARM_BUTTON_DOWN:
             movement_pin_service_set_requesting_face(face_index);
-            movement_move_to_face(movement_pin_service_get_pin_face());
+            movement_move_to_page(movement_face_to_page(movement_pin_service_get_pin_face()));
             break;
         default:
             return movement_default_loop_handler(event);
