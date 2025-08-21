@@ -77,4 +77,5 @@
 #include "wordle_face.h"
 #include "rtccount_face.h"
 #include "tunes_face.h"
+#include "page_ordering_face.h"
 // New includes go above this line.

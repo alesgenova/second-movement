@@ -250,7 +250,7 @@ bool chirpy_demo_face_loop(movement_event_t event, void *context) {
                 if (state->program == CDP_CLEAR) {
                     filesystem_write_file("activity.dat", "", 0);
                     movement_force_led_off();
-                    movement_move_to_next_face();
+                    movement_move_to_next_page();
                 } else {
                     _cdm_start_transmission(state);
                 }
@@ -259,7 +259,7 @@ bool chirpy_demo_face_loop(movement_event_t event, void *context) {
         case EVENT_TIMEOUT:
             // Do not time out while we're chirping
             if (state->mode != CDM_CHIRPING) {
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             }
         default:
             movement_default_loop_handler(event);

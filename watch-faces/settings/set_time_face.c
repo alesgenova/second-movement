@@ -116,7 +116,7 @@ bool set_time_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TIMEOUT:
             _abort_quick_ticks();
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             return movement_default_loop_handler(event);
