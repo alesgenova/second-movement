@@ -474,7 +474,7 @@ void movement_force_led_off(void) {
 bool movement_default_loop_handler(movement_event_t event) {
     switch (event.event_type) {
         case EVENT_MODE_BUTTON_DOWN:
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
             movement_illuminate_led();
@@ -485,9 +485,11 @@ bool movement_default_loop_handler(movement_event_t event) {
                 movement_force_led_off();
             }
             break;
-        case EVENT_MODE_LONG_PRESS:
-            if (MOVEMENT_SECONDARY_FACE_INDEX && movement_state.current_face_idx == 1) {
-                movement_move_to_face(MOVEMENT_SECONDARY_FACE_INDEX);
+        case EVENT_MODE_LONG_PRESS: {
+            uint8_t home_page = movement_find_first_enabled_page(0);
+            uint8_t home_page_plus_one = movement_find_first_enabled_page(1);
+            if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page_plus_one) {
+                movement_move_to_page(movement_state.secondary_page_idx);
             } else {
                 movement_move_to_page(home_page);
             }
