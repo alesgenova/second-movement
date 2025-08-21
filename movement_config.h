@@ -28,17 +28,26 @@
 #include "movement_faces.h"
 
 const watch_face_t watch_faces[] = {
-    clock_face,
-    world_clock_face,
-    sunrise_sunset_face,
-    moon_phase_face,
+    stock_clock_face,
+    alarm_face,
     fast_stopwatch_face,
     countdown_face,
-    alarm_face,
-    temperature_display_face,
-    voltage_face,
+    sunrise_sunset_face,
+    tunes_face,
+    totp_lfs_face,
+    counter_face,
+    probability_face,
+
     settings_face,
     set_time_face,
+    pin_face,
+    temperature_display_face,
+    voltage_face,
+    page_ordering_face,
+    rtccount_face,
+    finetune_face,
+    nanosec_face,
+    chirpy_demo_face,
 };
 
 #define MOVEMENT_NUM_FACES (sizeof(watch_faces) / sizeof(watch_face_t))
@@ -49,7 +58,7 @@ const watch_face_t watch_faces[] = {
  * Some folks also like to use this to hide the preferences and time set faces from the normal rotation.
  * If you don't want any faces to be excluded, set this to 0 and a long Mode press will have no effect.
  */
-#define MOVEMENT_SECONDARY_FACE_INDEX (MOVEMENT_NUM_FACES - 5)
+#define MOVEMENT_SECONDARY_FACE_INDEX (MOVEMENT_NUM_FACES - 10)
 
 /* Determines the intensity of the led colors
  * Set a hex value 0-15 with 0x0 being off and 0xF being max intensity
