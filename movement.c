@@ -450,7 +450,8 @@ bool movement_default_loop_handler(movement_event_t event) {
             break;
         case EVENT_MODE_LONG_PRESS: {
             uint8_t home_page = movement_find_first_enabled_page(0);
-            if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page) {
+            uint8_t home_page_plus_one = movement_find_first_enabled_page(1);
+            if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page_plus_one) {
                 movement_move_to_page(movement_state.secondary_page_idx);
             } else {
                 movement_move_to_page(home_page);

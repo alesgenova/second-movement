@@ -379,7 +379,7 @@ bool baby_kicks_face_loop(movement_event_t event, void *context) {
         case EVENT_MODE_BUTTON_DOWN:
             break;
         case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
         case EVENT_MODE_LONG_PRESS:     /* Reset. */
             _update_display_mode(state);
