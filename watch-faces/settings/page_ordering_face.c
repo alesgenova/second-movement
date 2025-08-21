@@ -149,7 +149,7 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
         case EVENT_TIMEOUT:
             movement_move_to_page(0);
             break;
-        case EVENT_MODE_BUTTON_UP:
+        case EVENT_MODE_BUTTON_DOWN:
             if (state->touched) {
                 movement_move_to_page(0);
             } else {
