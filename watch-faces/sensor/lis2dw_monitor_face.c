@@ -1,3 +1,4 @@
+
 /*
  * MIT License
  *
@@ -22,6 +23,8 @@
  * SOFTWARE.
  */
 
+#include <math.h>
+#include "count_steps.h"
 #include <stdlib.h>
 #include <string.h>
 #include "lis2dw_monitor_face.h"
@@ -33,6 +36,14 @@
 
 /* Settings */
 #define NUM_SETTINGS 7
+
+typedef struct {
+    int8_t count;
+    int8_t readings[NUM_TUPLES * 3];
+} accel_data_t;
+
+accel_data_t accel_data;
+static uint16_t total_step_count = 0;
 
 static void _settings_title_display(lis2dw_monitor_state_t *state, char *buf1, char *buf2)
 {
@@ -383,23 +394,44 @@ static void _lis2dw_set_state(lis2dw_device_state_t *ds)
     movement_set_accelerometer_background_rate(ds->data_rate);
 }
 
+static int16_t get_magnitude(lis2dw_reading_t reading) {
+    return sqrt(reading.x * reading.x + reading.y * reading.y + reading.z * reading.z);
+}
+
 static void _monitor_display(lis2dw_monitor_state_t *state)
 {
     char buf[10];
 
-    snprintf(buf, sizeof(buf), " %C ", "XYZ"[state->axis]);
-    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf, buf);
+    if (state->show_title) {
+        watch_display_text(WATCH_POSITION_BOTTOM, "LIS2DW");
+        return;
+    }
+
+    switch (state->axis)
+    {
+    case 0:
+        watch_display_text(WATCH_POSITION_TOP_LEFT, " X");
+        break;
+    case 1:
+        watch_display_text(WATCH_POSITION_TOP_LEFT, " Y");
+        break;
+    case 2:
+        watch_display_text(WATCH_POSITION_TOP_LEFT, " Z");
+        break;
+    case 3:
+        watch_display_text(WATCH_POSITION_TOP_LEFT, " A");
+        break;
+    default:
+        watch_display_text(WATCH_POSITION_TOP_LEFT, " S");
+        break;
+    }
 
     snprintf(buf, sizeof(buf), "%2d", state->axis + 1);
     watch_display_text_with_fallback(WATCH_POSITION_TOP_RIGHT, buf, buf);
 
-    if (state->show_title) {
-        snprintf(buf, sizeof(buf), "LIS2DW");
-        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
-        return;
-    }
-
-    if (state->ds.data_rate == LIS2DW_DATA_RATE_POWERDOWN) {
+    if (state->axis == 4) {
+        snprintf(buf, sizeof(buf), " %5d",  total_step_count);
+    } else if (state->ds.data_rate == LIS2DW_DATA_RATE_POWERDOWN) {
         /* No measurements available. */
         snprintf(buf, sizeof(buf), "  --  ");
     } else if (state->axis == 0) {
@@ -408,11 +440,13 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
     } else if (state->axis == 1) {
         char sign = (state->reading.y) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.y));
-    } else {
+    } else if (state->axis == 2) {
         char sign = (state->reading.z) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.z));
+    } else if (state->axis == 3) {
+        snprintf(buf, sizeof(buf), " %.5d",  get_magnitude(state->reading));
     }
-    watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
 static void _monitor_update(lis2dw_monitor_state_t *state)
@@ -430,6 +464,14 @@ static void _monitor_update(lis2dw_monitor_state_t *state)
         x += fifo.readings[i].x;
         y += fifo.readings[i].y;
         z += fifo.readings[i].z;
+        accel_data.readings[accel_data.count*3+0] = (int8_t)(fifo.readings[i].x / 2);
+        accel_data.readings[accel_data.count*3+1] = (int8_t)(fifo.readings[i].y / 2);
+        accel_data.readings[accel_data.count*3+2] = (int8_t)(fifo.readings[i].z / 2);
+        accel_data.count++;
+        if (accel_data.count >= NUM_TUPLES) {
+            total_step_count += count_steps(accel_data.readings);
+            memset(&accel_data, 0, sizeof(accel_data));
+        }
     }
 
     /* Divide by number of samples */
@@ -474,8 +516,13 @@ static bool _monitor_loop(movement_event_t event, void *context)
             state->show_title = (state->show_title > 0) ? state->show_title - 1 : 0;
             break;
         case EVENT_ALARM_BUTTON_UP:
-            state->axis = (state->axis + 1) % 3;
+            state->axis = (state->axis + 1) % 5;
             _monitor_display(state);
+            break;
+        case EVENT_LIGHT_BUTTON_UP:
+            if(state->axis == 4) {
+                total_step_count = 0;
+            }
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
             /* Do nothing. */
@@ -533,6 +580,7 @@ void lis2dw_monitor_face_setup(uint8_t watch_face_index, void **context_ptr)
     if (*context_ptr == NULL) {
         *context_ptr = malloc(sizeof(lis2dw_monitor_state_t));
         memset(*context_ptr, 0, sizeof(lis2dw_monitor_state_t));
+        memset(&accel_data, 0, sizeof(accel_data));
     }
     lis2dw_monitor_state_t *state = (lis2dw_monitor_state_t *) * context_ptr;
 
@@ -587,7 +635,9 @@ void lis2dw_monitor_face_activate(void *context)
 bool lis2dw_monitor_face_loop(movement_event_t event, void *context)
 {
     lis2dw_monitor_state_t *state = (lis2dw_monitor_state_t *) context;
-
+    if (event.event_type == EVENT_TIMEOUT) {
+         movement_move_to_face(0);
+    }
     switch (state->page) {
         default:
         case PAGE_LIS2DW_MONITOR:
