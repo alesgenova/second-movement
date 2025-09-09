@@ -94,6 +94,7 @@ typedef struct {
     volatile rtc_counter_t minute_counter;
     volatile bool minute_alarm_fired;
     volatile bool tick_fired_second;
+    volatile bool accelerometer_fired;
     volatile bool is_buzzing;
     volatile uint8_t pending_sequence_priority;
     volatile bool schedule_next_comp;
@@ -937,7 +938,13 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 }
 
 bool movement_enable_step_count(void) {
+    movement_state.counting_steps_ready = movement_state.has_lis2dw;
+    return movement_state.counting_steps_ready;
+}
+
+static void movement_start_step_count(void) {
     if (movement_state.has_lis2dw) {
+        movement_state.counting_steps = true;
         // ramp data rate up to 400 Hz and high performance mode
         lis2dw_set_low_noise_mode(true);
         lis2dw_set_data_rate(LIS2DW_DATA_RATE_25_HZ);
@@ -946,24 +953,25 @@ bool movement_enable_step_count(void) {
         lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
         lis2dw_set_range(LIS2DW_RANGE_4_G);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
-        movement_state.counting_steps = true;
         lis2dw_enable_fifo();
         lis2dw_clear_fifo();
-        return true;
     }
-    movement_state.counting_steps = false;
-    return false;
 }
 
-bool movement_disable_step_count(void) {
+static bool movement_stop_step_count(void) {
     movement_state.counting_steps = false;
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
     return movement_disable_tap_detection_if_available();
 }
 
+bool movement_disable_step_count(void) {
+    movement_state.counting_steps_ready = false;
+    return movement_stop_step_count();
+}
+
 bool movement_step_count_is_enabled(void) {
-    return movement_state.counting_steps;
+    return movement_state.counting_steps_ready;
 }
 
 static uint8_t movement_count_new_steps(void)
@@ -1141,6 +1149,10 @@ void app_init(void) {
     movement_state.signal_volume = MOVEMENT_DEFAULT_SIGNAL_VOLUME;
     movement_state.alarm_volume = MOVEMENT_DEFAULT_ALARM_VOLUME;
     movement_state.count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
+    movement_state.count_steps_interrupts_seen = 0;
+    movement_state.count_steps_interrupts_not_seen = 0;
+    movement_state.counting_steps_ready = false;
+    movement_state.counting_steps = false;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
@@ -1220,11 +1232,8 @@ void app_setup(void) {
 
             // set up interrupts:
             // INT1 is wired to pin A3. We'll configure the accelerometer to output an interrupt on INT1 when it detects an orientation change.
-            /// TODO: We had routed this interrupt to TC2 to count orientation changes, but TC2 consumed too much power.
-            /// Orientation changes helped with sleep tracking; would love to bring this back if we can find a low power solution.
-            /// For now, commenting these lines out; check commit 27f0c629d865f4bc56bc6e678da1eb8f4b919093 for power-hungry but working code.
-            // lis2dw_configure_int1(LIS2DW_CTRL4_INT1_6D);
-            // HAL_GPIO_A3_in();
+            lis2dw_configure_int1(LIS2DW_CTRL4_INT1_6D);
+            HAL_GPIO_A3_in();
 
             // next: INT2 is wired to pin A4. We'll configure the accelerometer to output the sleep state on INT2.
             // a falling edge on INT2 indicates the accelerometer has woken up.
@@ -1408,11 +1417,27 @@ bool app_loop(void) {
         event_type = event_type + next_event + 1;
     }
 
-    if (movement_volatile_state.tick_fired_second)
+    const uint8_t no_activity_seconds = 2;
+    if (movement_volatile_state.tick_fired_second && movement_state.counting_steps_ready)
     {
-        movement_volatile_state.tick_fired_second = false;
-        if (movement_state.counting_steps) movement_count_new_steps();
+        if (movement_volatile_state.accelerometer_fired) {
+            movement_state.count_steps_interrupts_seen += (no_activity_seconds > movement_state.count_steps_interrupts_seen) ? 1 : 0;
+            movement_state.count_steps_interrupts_not_seen = 0;
+        } else {
+            movement_state.count_steps_interrupts_not_seen += (no_activity_seconds > movement_state.count_steps_interrupts_not_seen) ? 1 : 0;
+            movement_state.count_steps_interrupts_seen = 0;
+        }
+        if (movement_state.counting_steps) {
+            movement_count_new_steps();
+            if (movement_state.count_steps_interrupts_not_seen >= no_activity_seconds) {
+                movement_stop_step_count();
+            }
+        } else if (movement_state.count_steps_interrupts_seen >= no_activity_seconds) {
+            movement_start_step_count();
+        } 
     }
+    movement_volatile_state.tick_fired_second = false;
+    movement_volatile_state.accelerometer_fired = false;
 
     // handle top-of-minute tasks, if the alarm handler told us we need to
     if (movement_volatile_state.minute_alarm_fired) {
@@ -1641,6 +1666,10 @@ void cb_tick(void) {
 
 void cb_accelerometer_event(void) {
     movement_volatile_state.has_pending_accelerometer = true;
+    if (movement_state.counting_steps_ready) {
+        movement_volatile_state.accelerometer_fired = true;
+        return;
+    }
 }
 
 void cb_accelerometer_wake(void) {
