@@ -73,7 +73,11 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             state->step_count_prev = display_step_count_now();
             break;
         case EVENT_LOW_ENERGY_UPDATE:
+            watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
             movement_disable_step_count();
+            break;
+        case EVENT_BACKGROUND_TASK:
+            movement_reset_step_count();
             break;
         default:
             return movement_default_loop_handler(event);
@@ -84,4 +88,13 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 void step_counter_face_resign(void *context) {
     (void) context;
     movement_disable_step_count();
+}
+
+movement_watch_face_advisory_t step_counter_face_advise(void *context) {
+    (void) context;
+    movement_watch_face_advisory_t retval = { 0 };
+    watch_date_time_t date_time = movement_get_local_date_time();
+    // To reset the step count at midnight
+    retval.wants_background_task = (date_time.unit.hour == 0 && date_time.unit.minute == 0);
+    return retval;
 }

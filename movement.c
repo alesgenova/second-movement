@@ -378,10 +378,6 @@ static void _movement_handle_button_presses(uint32_t pending_events) {
 static void _movement_handle_top_of_minute(void) {
     watch_date_time_t date_time = watch_rtc_get_date_time();
 
-    // update the DST offset cache every 30 minutes, since someplace in the world could change.
-    if (date_time.unit.minute % 30 == 0) {
-        _movement_update_dst_offset_cache();
-    }
 
     for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
         // For each face that offers an advisory...
@@ -939,6 +935,10 @@ bool movement_disable_step_count(void) {
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
     return movement_disable_tap_detection_if_available();
+}
+
+bool movement_step_count_is_enabled(void) {
+    return movement_volatile_state.counting_steps;
 }
 
 static uint8_t movement_count_new_steps(void)

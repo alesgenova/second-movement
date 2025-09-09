@@ -42,11 +42,12 @@ void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr);
 void step_counter_face_activate(void *context);
 bool step_counter_face_loop(movement_event_t event, void *context);
 void step_counter_face_resign(void *context);
+movement_watch_face_advisory_t step_counter_face_advise(void *context);
 
 #define step_counter_face ((const watch_face_t){ \
     step_counter_face_setup, \
     step_counter_face_activate, \
     step_counter_face_loop, \
     step_counter_face_resign, \
-    NULL, \
+    step_counter_face_advise, \
 })
