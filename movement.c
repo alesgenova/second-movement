@@ -1611,6 +1611,7 @@ void cb_alarm_btn_extwake(void) {
 
 void cb_minute_alarm_fired(void) {
     movement_volatile_state.minute_alarm_fired = true;
+    if (movement_state.counting_steps) movement_count_new_steps();
 
 #if __EMSCRIPTEN__
     _wake_up_simulator();
@@ -1624,7 +1625,6 @@ void cb_tick(void) {
     uint32_t subsecond_mask = freq - 1;
     movement_volatile_state.pending_events |= 1 << EVENT_TICK;
     movement_volatile_state.subsecond = ((counter + half_freq) & subsecond_mask) >> movement_state.tick_pern;
-    if (movement_state.counting_steps) movement_count_new_steps();
 }
 
 void cb_accelerometer_event(void) {

@@ -195,6 +195,7 @@ static void low_energy_setting_advance(void) {
     movement_set_low_energy_timeout((movement_get_low_energy_timeout() + 1));
 }
 
+#ifdef I2C_SERCOM
 static void step_counter_setting_display(uint8_t subsecond) {
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "STEP", "ST");
     movement_step_count_option_t step_count_setting = movement_get_count_steps();
@@ -227,6 +228,7 @@ static void step_counter_setting_advance(void) {
     movement_step_count_option_t next_mode = (step_count_setting + 1) % MOVEMENT_SC_NOT_INSTALLED;
     movement_set_count_steps(next_mode);
 }
+#endif
 
 static void led_duration_setting_display(uint8_t subsecond) {
     char buf[8];
