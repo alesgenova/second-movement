@@ -377,6 +377,10 @@ static void _movement_handle_button_presses(uint32_t pending_events) {
 static void _movement_handle_top_of_minute(void) {
     watch_date_time_t date_time = watch_rtc_get_date_time();
 
+    // update the DST offset cache every 30 minutes, since someplace in the world could change.
+    if (date_time.unit.minute % 30 == 0) {
+        _movement_update_dst_offset_cache();
+    }
 
     for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
         // For each face that offers an advisory...
