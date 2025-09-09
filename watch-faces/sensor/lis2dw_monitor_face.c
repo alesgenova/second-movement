@@ -1,4 +1,3 @@
-
 /*
  * MIT License
  *
@@ -23,7 +22,6 @@
  * SOFTWARE.
  */
 
-#include <math.h>
 #include "count_steps.h"
 #include <stdlib.h>
 #include <string.h>
@@ -36,14 +34,6 @@
 
 /* Settings */
 #define NUM_SETTINGS 7
-
-typedef struct {
-    int8_t count;
-    int8_t readings[COUNT_STEPS_NUM_TUPLES * 3];
-} accel_data_t;
-
-accel_data_t accel_data;
-static uint16_t total_step_count = 0;
 
 static void _settings_title_display(lis2dw_monitor_state_t *state, char *buf1, char *buf2)
 {
@@ -394,37 +384,12 @@ static void _lis2dw_set_state(lis2dw_device_state_t *ds)
     movement_set_accelerometer_background_rate(ds->data_rate);
 }
 
-static int16_t get_magnitude(lis2dw_reading_t reading) {
-    return sqrt(reading.x * reading.x + reading.y * reading.y + reading.z * reading.z);
-}
-
 static void _monitor_display(lis2dw_monitor_state_t *state)
 {
     char buf[10];
 
-    if (state->show_title) {
-        watch_display_text(WATCH_POSITION_BOTTOM, "LIS2DW");
-        return;
-    }
-
-    switch (state->axis)
-    {
-    case 0:
-        watch_display_text(WATCH_POSITION_TOP_LEFT, " X");
-        break;
-    case 1:
-        watch_display_text(WATCH_POSITION_TOP_LEFT, " Y");
-        break;
-    case 2:
-        watch_display_text(WATCH_POSITION_TOP_LEFT, " Z");
-        break;
-    case 3:
-        watch_display_text(WATCH_POSITION_TOP_LEFT, " A");
-        break;
-    default:
-        watch_display_text(WATCH_POSITION_TOP_LEFT, " S");
-        break;
-    }
+    snprintf(buf, sizeof(buf), " %C ", "XYZS"[state->axis]);
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf, buf);
 
     snprintf(buf, sizeof(buf), "%2d", state->axis + 1);
     watch_display_text_with_fallback(WATCH_POSITION_TOP_RIGHT, buf, buf);
@@ -440,13 +405,11 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
     } else if (state->axis == 1) {
         char sign = (state->reading.y) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.y));
-    } else if (state->axis == 2) {
+    } else {
         char sign = (state->reading.z) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.z));
-    } else if (state->axis == 3) {
-        snprintf(buf, sizeof(buf), " %.5d",  get_magnitude(state->reading));
     }
-    watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
 }
 
 static void _monitor_update(lis2dw_monitor_state_t *state)
@@ -516,7 +479,7 @@ static bool _monitor_loop(movement_event_t event, void *context)
             state->show_title = (state->show_title > 0) ? state->show_title - 1 : 0;
             break;
         case EVENT_ALARM_BUTTON_UP:
-            state->axis = (state->axis + 1) % 5;
+            state->axis = (state->axis + 1) % 4;
             _monitor_display(state);
             break;
         case EVENT_LIGHT_BUTTON_UP:
