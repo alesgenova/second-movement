@@ -313,9 +313,6 @@ typedef struct {
 
     uint8_t count_steps    : 7;
     uint8_t counting_steps : 1;
-    uint8_t counting_steps_ready : 1;
-    uint8_t count_steps_interrupts_seen : 4;
-    uint8_t count_steps_interrupts_not_seen : 4;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);
