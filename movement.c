@@ -753,6 +753,14 @@ void movement_set_signal_volume(watch_buzzer_volume_t value) {
     movement_state.signal_volume = value;
 }
 
+bool movement_get_count_steps(void) {
+    return movement_state.count_steps;
+}
+
+void movement_set_count_steps(bool value) {
+    movement_state.count_steps = value;
+}
+
 watch_buzzer_volume_t movement_alarm_volume(void) {
     return movement_state.alarm_volume;
 }
@@ -1106,6 +1114,7 @@ void app_init(void) {
 
     movement_state.signal_volume = MOVEMENT_DEFAULT_SIGNAL_VOLUME;
     movement_state.alarm_volume = MOVEMENT_DEFAULT_ALARM_VOLUME;
+    movement_state.count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();

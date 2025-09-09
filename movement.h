@@ -303,6 +303,8 @@ typedef struct {
     // signal and alarm volumes
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
+
+    bool count_steps;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);
@@ -365,6 +367,9 @@ void movement_set_signal_volume(watch_buzzer_volume_t value);
 
 watch_buzzer_volume_t movement_alarm_volume(void);
 void movement_set_alarm_volume(watch_buzzer_volume_t value);
+
+bool movement_get_count_steps(void);
+void movement_set_count_steps(bool value);
 
 movement_clock_mode_t movement_clock_mode_24h(void);
 void movement_set_clock_mode_24h(movement_clock_mode_t value);

@@ -195,6 +195,19 @@ static void low_energy_setting_advance(void) {
     movement_set_low_energy_timeout((movement_get_low_energy_timeout() + 1));
 }
 
+static void step_counter_setting_display(uint8_t subsecond) {
+    watch_display_text_with_fallback(WATCH_POSITION_TOP, "STP", "ST");
+    watch_display_text(WATCH_POSITION_BOTTOM, " COUNT");
+    if (subsecond % 2) {
+        if (movement_get_count_steps()) watch_display_text(WATCH_POSITION_TOP_RIGHT, " Y");
+        else watch_display_text(WATCH_POSITION_TOP_RIGHT, " N");
+    }
+}
+
+static void step_counter_setting_advance(void) {
+    movement_set_count_steps(!movement_get_count_steps());
+}
+
 static void led_duration_setting_display(uint8_t subsecond) {
     char buf[8];
 
@@ -293,7 +306,7 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         settings_state_t *state = (settings_state_t *)*context_ptr;
         int8_t current_setting = 0;
 
-        state->num_settings = 7; // baseline, without LED settings
+        state->num_settings = 8; // baseline, without LED settings
 #ifdef BUILD_GIT_HASH
         state->num_settings++;
 #endif
@@ -328,6 +341,9 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         state->settings_screens[current_setting].advance = low_energy_setting_advance;
         current_setting++;
 #endif
+        state->settings_screens[current_setting].display = step_counter_setting_display;
+        state->settings_screens[current_setting].advance = step_counter_setting_advance;
+        current_setting++;
         state->settings_screens[current_setting].display = led_duration_setting_display;
         state->settings_screens[current_setting].advance = led_duration_setting_advance;
         current_setting++;

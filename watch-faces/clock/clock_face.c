@@ -251,6 +251,10 @@ bool clock_face_loop(movement_event_t event, void *context) {
 
             state->date_time.previous = current;
 
+            if (movement_get_count_steps()) {
+                movement_enable_step_count();
+            }
+
             break;
         case EVENT_ALARM_LONG_PRESS:
             clock_toggle_time_signal(state);
@@ -269,6 +273,9 @@ bool clock_face_loop(movement_event_t event, void *context) {
 
 void clock_face_resign(void *context) {
     (void) context;
+    if (movement_get_count_steps()) {
+        movement_disable_step_count();
+    }
 }
 
 movement_watch_face_advisory_t clock_face_advise(void *context) {

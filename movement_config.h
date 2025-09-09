@@ -102,6 +102,11 @@ const watch_face_t watch_faces[] = {
  */
 #define MOVEMENT_DEFAULT_LED_DURATION 1
 
+
+/* If True, then we count steps in the main face when not sleeping.
+*/
+#define MOVEMENT_DEFAULT_COUNT_STEPS true
+
 /* Optionally debounce button presses (disable by default).
  * A value of 4 is a good starting point if you have issues
  * with multiple button presses firing.
