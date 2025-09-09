@@ -42,9 +42,6 @@
 #define CLOCK_FACE_LOW_BATTERY_VOLTAGE_THRESHOLD 2400
 #endif
 
-#define STEP_COUNT_HOUR_START 5
-#define STEP_COUNT_HOUR_END 23
-
 static void clock_indicate(watch_indicator_t indicator, bool on) {
     if (on) {
         watch_set_indicator(indicator);
@@ -250,8 +247,7 @@ bool clock_face_loop(movement_event_t event, void *context) {
             current = movement_get_local_date_time();
 
             if (movement_get_count_steps()) {
-                bool in_count_step_hours = (current.unit.hour >= STEP_COUNT_HOUR_START) 
-                                        && (current.unit.hour < STEP_COUNT_HOUR_END);
+                bool in_count_step_hours = movement_in_step_counter_interval(current.unit.hour);
                 if (!movement_step_count_is_enabled()) {
                     if (in_count_step_hours) {
                         movement_enable_step_count();

@@ -97,7 +97,6 @@ typedef struct {
     volatile uint8_t pending_sequence_priority;
     volatile bool schedule_next_comp;
     volatile bool has_pending_accelerometer;
-    volatile bool counting_steps;
 
     // button tracking for long press
     movement_button_t mode_button;
@@ -713,6 +712,26 @@ void movement_set_local_date_time(watch_date_time_t date_time) {
     movement_set_utc_timestamp(watch_utility_date_time_to_unix_time(date_time, current_offset));
 }
 
+uint8_t get_step_count_start_hour(void) {
+    return MOVEMENT_STEP_COUNT_START;
+}
+
+uint8_t get_step_count_end_hour(void) {
+    return MOVEMENT_STEP_COUNT_END;
+}
+
+bool movement_in_step_counter_interval(uint8_t hour) {
+    switch (movement_get_count_steps())
+    {
+    case MOVEMENT_SC_ALWAYS:
+        return true;
+    case MOVEMENT_SC_DAYTIME:
+        return hour >= MOVEMENT_STEP_COUNT_START && hour < MOVEMENT_STEP_COUNT_END;
+    default:
+        return false;
+    }
+}
+
 void movement_set_utc_timestamp(uint32_t timestamp) {
     watch_rtc_set_unix_time(timestamp);
 
@@ -749,11 +768,12 @@ void movement_set_signal_volume(watch_buzzer_volume_t value) {
     movement_state.signal_volume = value;
 }
 
-bool movement_get_count_steps(void) {
+movement_step_count_option_t movement_get_count_steps(void) {
+    if (movement_state.has_lis2dw) return MOVEMENT_SC_NOT_INSTALLED;
     return movement_state.count_steps;
 }
 
-void movement_set_count_steps(bool value) {
+void movement_set_count_steps(movement_step_count_option_t value) {
     movement_state.count_steps = value;
 }
 
@@ -921,24 +941,24 @@ bool movement_enable_step_count(void) {
         lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
         lis2dw_set_range(LIS2DW_RANGE_4_G);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
-        movement_volatile_state.counting_steps = true;
+        movement_state.counting_steps = true;
         lis2dw_enable_fifo();
         lis2dw_clear_fifo();
         return true;
     }
-    movement_volatile_state.counting_steps = false;
+    movement_state.counting_steps = false;
     return false;
 }
 
 bool movement_disable_step_count(void) {
-    movement_volatile_state.counting_steps = false;
+    movement_state.counting_steps = false;
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
     return movement_disable_tap_detection_if_available();
 }
 
 bool movement_step_count_is_enabled(void) {
-    return movement_volatile_state.counting_steps;
+    return movement_state.counting_steps;
 }
 
 static uint8_t movement_count_new_steps(void)
@@ -1604,7 +1624,7 @@ void cb_tick(void) {
     uint32_t subsecond_mask = freq - 1;
     movement_volatile_state.pending_events |= 1 << EVENT_TICK;
     movement_volatile_state.subsecond = ((counter + half_freq) & subsecond_mask) >> movement_state.tick_pern;
-    if (movement_volatile_state.counting_steps) movement_count_new_steps();
+    if (movement_state.counting_steps) movement_count_new_steps();
 }
 
 void cb_accelerometer_event(void) {

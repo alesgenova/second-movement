@@ -107,6 +107,12 @@ const watch_face_t watch_faces[] = {
 */
 #define MOVEMENT_DEFAULT_COUNT_STEPS true
 
+/* If the settings are set to use this start and end hor,
+    We only count steps when the step counter face is on.
+*/
+#define MOVEMENT_STEP_COUNT_START 5
+#define MOVEMENT_STEP_COUNT_END 22
+
 /* Optionally debounce button presses (disable by default).
  * A value of 4 is a good starting point if you have issues
  * with multiple button presses firing.

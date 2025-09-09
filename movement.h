@@ -57,6 +57,13 @@ typedef enum {
     MOVEMENT_NUM_CLOCK_MODES
 } movement_clock_mode_t;
 
+typedef enum {
+    MOVEMENT_SC_OFF = 0,
+    MOVEMENT_SC_ALWAYS,
+    MOVEMENT_SC_DAYTIME,
+    MOVEMENT_SC_NOT_INSTALLED
+} movement_step_count_option_t;
+
 /// struct for Movement LED color
 typedef struct {
     uint8_t red : 4;
@@ -304,7 +311,8 @@ typedef struct {
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
 
-    bool count_steps;
+    uint8_t count_steps    : 7;
+    uint8_t counting_steps : 1;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);
@@ -368,8 +376,12 @@ void movement_set_signal_volume(watch_buzzer_volume_t value);
 watch_buzzer_volume_t movement_alarm_volume(void);
 void movement_set_alarm_volume(watch_buzzer_volume_t value);
 
-bool movement_get_count_steps(void);
-void movement_set_count_steps(bool value);
+movement_step_count_option_t movement_get_count_steps(void);
+void movement_set_count_steps(movement_step_count_option_t value);
+
+uint8_t get_step_count_start_hour(void);
+uint8_t get_step_count_end_hour(void);
+bool movement_in_step_counter_interval(uint8_t hour);
 
 movement_clock_mode_t movement_clock_mode_24h(void);
 void movement_set_clock_mode_24h(movement_clock_mode_t value);
