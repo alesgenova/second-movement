@@ -774,7 +774,7 @@ void movement_set_signal_volume(watch_buzzer_volume_t value) {
 }
 
 movement_step_count_option_t movement_get_count_steps(void) {
-    if (movement_state.has_lis2dw) return MOVEMENT_SC_NOT_INSTALLED;
+    if (!movement_state.has_lis2dw) return MOVEMENT_SC_NOT_INSTALLED;
     return movement_state.count_steps;
 }
 
