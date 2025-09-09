@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2025 <#author_name#>
+ * Copyright (c) 2025 David Volovskiy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,20 +22,29 @@
  * SOFTWARE.
  */
 
-#pragma once
+#ifndef STEP_COUNTER_FACE_H_
+#define STEP_COUNTER_FACE_H_
 
-#include "movement.h"
+#define STEP_COUNTER_NUM_DATA_POINTS (36)
 
 /*
- * A DESCRIPTION OF YOUR WATCH FACE
- *
- * and a description of how use it
+ * STEP_COUNTER face
  *
  */
 
+#include "movement.h"
+
 typedef struct {
-    // Anything you need to keep track of, put it here!
+    watch_date_time_t timestamp;
+    uint16_t step_count;
+} step_counter_face_data_point_t;
+
+typedef struct {
     uint16_t step_count_prev;
+    uint8_t display_index;  // the index we are displaying on screen
+    uint8_t ts_ticks;       // when the user taps the LIGHT button, we show the timestamp for a few ticks.
+    int32_t data_points;    // the absolute number of data points logged
+    step_counter_face_data_point_t data[STEP_COUNTER_NUM_DATA_POINTS];
 } step_counter_state_t;
 
 void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr);
@@ -51,3 +60,5 @@ movement_watch_face_advisory_t step_counter_face_advise(void *context);
     step_counter_face_resign, \
     step_counter_face_advise, \
 })
+
+#endif // STEP_COUNTER_FACE_H_
