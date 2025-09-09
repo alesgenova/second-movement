@@ -23,10 +23,10 @@ sample order (i.e., [X1,Y1,Z1,X2,Y2,Z2,...Xn,Yn,Zn]). As a reference, a data fil
 with sample accelerometer data. 
 
 There are several #define parameters defined in count_steps.c and count_steps.h that should
-be adjusted based on your data. SAMPLING_RATE is the sampling rate of the accelerometer data.
-WINDOW_LENGTH is the length of the window of data that is analyzed by the algorithm, which
-is optimally 4 seconds long. NUM_TUPLES is the number of triplets of accelerometer data, so
-to get a WINDOW_LENGTH of 4 seconds with a SAMPLING_RATE of 20Hz, NUM_TUPLES should be set to
+be adjusted based on your data. COUNT_STEPS_SAMPLING_RATE is the sampling rate of the accelerometer data.
+COUNT_STEPS_WINDOW_LENGTH is the length of the window of data that is analyzed by the algorithm, which
+is optimally 4 seconds long. COUNT_STEPS_NUM_TUPLES is the number of triplets of accelerometer data, so
+to get a COUNT_STEPS_WINDOW_LENGTH of 4 seconds with a COUNT_STEPS_SAMPLING_RATE of 20Hz, COUNT_STEPS_NUM_TUPLES should be set to
 80. The only other value to adjust is NUM_AUTOCORR_LAGS, which determines the maximum frequency
 that can be calculated. It should be set such that it corresponds to roughly 0.4Hz.
 

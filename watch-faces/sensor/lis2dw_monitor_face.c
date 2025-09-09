@@ -39,7 +39,7 @@
 
 typedef struct {
     int8_t count;
-    int8_t readings[NUM_TUPLES * 3];
+    int8_t readings[COUNT_STEPS_NUM_TUPLES * 3];
 } accel_data_t;
 
 accel_data_t accel_data;
@@ -468,7 +468,7 @@ static void _monitor_update(lis2dw_monitor_state_t *state)
         accel_data.readings[accel_data.count*3+1] = (int8_t)(fifo.readings[i].y / 2);
         accel_data.readings[accel_data.count*3+2] = (int8_t)(fifo.readings[i].z / 2);
         accel_data.count++;
-        if (accel_data.count >= NUM_TUPLES) {
+        if (accel_data.count >= COUNT_STEPS_NUM_TUPLES) {
             total_step_count += count_steps(accel_data.readings);
             memset(&accel_data, 0, sizeof(accel_data));
         }

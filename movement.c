@@ -45,6 +45,7 @@
 #include "evsys.h"
 #include "delay.h"
 #include "thermistor_driver.h"
+#include "count_steps.h"
 
 #include "movement_config.h"
 
@@ -96,6 +97,7 @@ typedef struct {
     volatile uint8_t pending_sequence_priority;
     volatile bool schedule_next_comp;
     volatile bool has_pending_accelerometer;
+    volatile bool counting_steps;
 
     // button tracking for long press
     movement_button_t mode_button;
@@ -107,6 +109,14 @@ typedef struct {
 } movement_volatile_state_t;
 
 movement_volatile_state_t movement_volatile_state;
+
+typedef struct {
+    int8_t count;
+    int8_t readings[COUNT_STEPS_NUM_TUPLES * 3];
+} accel_data_t;
+
+accel_data_t _accel_data;
+static uint16_t _total_step_count = 0;
 
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
@@ -897,6 +907,67 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
     return false;
 }
 
+bool movement_enable_step_count(void) {
+    if (movement_state.has_lis2dw) {
+        // ramp data rate up to 400 Hz and high performance mode
+        lis2dw_set_low_noise_mode(true);
+        lis2dw_set_data_rate(LIS2DW_DATA_RATE_25_HZ);
+        lis2dw_set_filter_type(LIS2DW_FILTER_LOW_PASS);
+        lis2dw_set_low_power_mode(LIS2DW_LP_MODE_2);
+        lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
+        lis2dw_set_range(LIS2DW_RANGE_4_G);
+        lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
+        movement_volatile_state.counting_steps = true;
+        lis2dw_enable_fifo();
+        lis2dw_clear_fifo();
+        return true;
+    }
+    movement_volatile_state.counting_steps = false;
+    return false;
+}
+
+bool movement_disable_step_count(void) {
+    movement_volatile_state.counting_steps = false;
+    lis2dw_clear_fifo();
+    lis2dw_disable_fifo();
+    return movement_disable_tap_detection_if_available();
+}
+
+static uint8_t movement_count_new_steps(void)
+{
+    lis2dw_fifo_t fifo;
+    uint8_t new_steps = 0;
+
+    lis2dw_read_fifo(&fifo);
+    if (fifo.count == 0) {
+        return new_steps;
+    }
+
+    /* Add up samples in fifo */
+    for (uint8_t i = 0; i < fifo.count; i++) {
+        _accel_data.readings[_accel_data.count*3+0] = (int8_t)(fifo.readings[i].x / 2);
+        _accel_data.readings[_accel_data.count*3+1] = (int8_t)(fifo.readings[i].y / 2);
+        _accel_data.readings[_accel_data.count*3+2] = (int8_t)(fifo.readings[i].z / 2);
+        _accel_data.count++;
+        if (_accel_data.count >= COUNT_STEPS_NUM_TUPLES) {
+            new_steps = count_steps(_accel_data.readings);
+            _total_step_count += new_steps;
+            memset(&_accel_data, 0, sizeof(_accel_data));
+            //_accel_data.count = 0;
+        }
+    }
+    lis2dw_clear_fifo();
+    return new_steps;
+}
+
+void movement_reset_step_count(void) {
+    _total_step_count = 0;
+}
+
+uint16_t movement_get_step_count(void) {
+    return _total_step_count;
+}
+
 float movement_get_temperature(void) {
     float temperature_c = (float)0xFFFFFFFF;
 #if __EMSCRIPTEN__
@@ -1524,6 +1595,7 @@ void cb_tick(void) {
     uint32_t subsecond_mask = freq - 1;
     movement_volatile_state.pending_events |= 1 << EVENT_TICK;
     movement_volatile_state.subsecond = ((counter + half_freq) & subsecond_mask) >> movement_state.tick_pern;
+    if (movement_volatile_state.counting_steps) movement_count_new_steps();
 }
 
 void cb_accelerometer_event(void) {

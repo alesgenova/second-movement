@@ -13,8 +13,8 @@
 
 static int8_t deriv_coeffs[DERIV_FILT_LEN]        = {-6,31,0,-31,6};            //coefficients of derivative filter from https://www.dsprelated.com/showarticle/814.php
 static int8_t lpf_coeffs[LPF_FILT_LEN]            = {-5,6,34,68,84,68,34,6,-5}; //coefficients of FIR low pass filter generated in matlab using FDATOOL
-static uint8_t mag_sqrt[NUM_TUPLES]               = {0};                        //this holds the square root of magnitude data of X,Y,Z (so its length is NUM_SAMPLES/3)
-static int32_t lpf[NUM_TUPLES]                    = {0};                        //hold the low pass filtered signal
+static uint8_t mag_sqrt[COUNT_STEPS_NUM_TUPLES]               = {0};                        //this holds the square root of magnitude data of X,Y,Z (so its length is NUM_SAMPLES/3)
+static int32_t lpf[COUNT_STEPS_NUM_TUPLES]                    = {0};                        //hold the low pass filtered signal
 static int64_t autocorr_buff[NUM_AUTOCORR_LAGS]   = {0};                        //holds the autocorrelation results
 static int64_t deriv[NUM_AUTOCORR_LAGS]           = {0};                        //holds derivative
 
@@ -149,7 +149,7 @@ static void autocorr(int32_t *lpf, int64_t *autocorr_buff) {
     int64_t temp_ac;
     for (lag = 0; lag < NUM_AUTOCORR_LAGS; lag++) {
         temp_ac = 0;
-        for (i = 0; i < NUM_TUPLES-lag; i++) {
+        for (i = 0; i < COUNT_STEPS_NUM_TUPLES-lag; i++) {
             temp_ac += (int64_t)lpf[i]*(int64_t)lpf[i+lag];
         }
         autocorr_buff[lag] = temp_ac;
@@ -162,12 +162,12 @@ static void remove_mean(int32_t *lpf) {
     
     int32_t sum = 0;
     uint16_t i;
-    for (i = 0; i < NUM_TUPLES; i++) {
+    for (i = 0; i < COUNT_STEPS_NUM_TUPLES; i++) {
         sum += lpf[i];
     }
-    sum = sum/(NUM_TUPLES);
+    sum = sum/(COUNT_STEPS_NUM_TUPLES);
     
-    for (i = 0; i < NUM_TUPLES; i++) {
+    for (i = 0; i < COUNT_STEPS_NUM_TUPLES; i++) {
         lpf[i] = lpf[i] - sum;
     }
 }
@@ -179,7 +179,7 @@ static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf) {
     uint16_t n;
     uint8_t i;
     int32_t temp_lpf;
-    for (n = 0; n < NUM_TUPLES; n++) {
+    for (n = 0; n < COUNT_STEPS_NUM_TUPLES; n++) {
         temp_lpf = 0;
         for (i = 0; i < LPF_FILT_LEN; i++) {
             if (n-i >= 0) {     //handle the case when n < filter length
@@ -199,7 +199,7 @@ uint8_t count_steps(int8_t *data) {
     //then temp_mag = sqrt(temp_mag)
     uint16_t i;
     uint16_t temp_mag;
-    for (i = 0; i < NUM_TUPLES; i++) {
+    for (i = 0; i < COUNT_STEPS_NUM_TUPLES; i++) {
         temp_mag = (uint16_t)((uint16_t)data[i*3+0]*(uint16_t)data[i*3+0] + (uint16_t)data[i*3+1]*(uint16_t)data[i*3+1] + (uint16_t)data[i*3+2]*(uint16_t)data[i*3+2]);
         mag_sqrt[i] = (uint8_t)SquareRoot(temp_mag);
     }
@@ -243,9 +243,9 @@ uint8_t count_steps(int8_t *data) {
     //now check the conditions to see if it was a real peak or not, and if so, calculate the number of steps
     uint8_t num_steps = 0;
     if ((pos_slope_count > AUTOCORR_MIN_HALF_LEN) && (neg_slope_count > AUTOCORR_MIN_HALF_LEN) && (delta_amplitude_right > AUTOCORR_DELTA_AMPLITUDE_THRESH) && (delta_amplitude_left > AUTOCORR_DELTA_AMPLITUDE_THRESH)) {
-        //the period is peak_ind/sampling_rate seconds. that corresponds to a frequency of 1/period
+        //the period is peak_ind/COUNT_STEPS_SAMPLING_RATE seconds. that corresponds to a frequency of 1/period
         //with the frequency known, and the number of seconds is 4 seconds, you can then find out the number of steps
-        num_steps = (SAMPLING_RATE*WINDOW_LENGTH)/peak_ind;
+        num_steps = (COUNT_STEPS_SAMPLING_RATE*COUNT_STEPS_WINDOW_LENGTH)/peak_ind;
     } else {
         //not a valid autocorrelation peak
         num_steps = 0;

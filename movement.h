@@ -404,6 +404,12 @@ bool movement_set_accelerometer_background_rate(lis2dw_data_rate_t new_rate);
 uint8_t movement_get_accelerometer_motion_threshold(void);
 bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold);
 
+// if the board has an accelerometer, these functions will enable or disable step_counting
+bool movement_enable_step_count(void);
+bool movement_disable_step_count(void);
+void movement_reset_step_count(void);
+uint16_t movement_get_step_count(void);
+
 // If the board has a temperature sensor, this function will give you the temperature in degrees celsius.
 // If the board has multiple temperature sensors, it will use the most accurate one available.
 // If the board has no temperature sensors, it will return 0xFFFFFFFF.
