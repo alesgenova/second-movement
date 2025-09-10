@@ -165,6 +165,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
         case EVENT_BACKGROUND_TASK:
             _step_counter_face_log_data(logger_state);
             movement_reset_step_count();
+            logger_state->display_index = (logger_state->display_index + 1) % (logger_state->data_points + 1);
             break;
         default:
             return movement_default_loop_handler(event);
