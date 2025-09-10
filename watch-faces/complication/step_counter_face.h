@@ -35,14 +35,13 @@
 #include "movement.h"
 
 typedef struct {
-    watch_date_time_t timestamp;
+    uint8_t day;
     uint16_t step_count;
 } step_counter_face_data_point_t;
 
 typedef struct {
     uint16_t step_count_prev;
     uint8_t display_index;  // the index we are displaying on screen
-    uint8_t ts_ticks;       // when the user taps the LIGHT button, we show the timestamp for a few ticks.
     int32_t data_points;    // the absolute number of data points logged
     step_counter_face_data_point_t data[STEP_COUNTER_NUM_DATA_POINTS];
 } step_counter_state_t;
