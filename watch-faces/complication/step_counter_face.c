@@ -26,7 +26,15 @@
 #include <string.h>
 #include "step_counter_face.h"
 
+#define STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN 5
 #define STEP_COUNTER_LOGGING_CYC (STEP_COUNTER_NUM_DATA_POINTS + 1)
+
+// distant future for background task: January 1, 2083
+static const watch_date_time_t distant_future = {
+    .unit = {0, 0, 0, 1, 1, 63}
+};
+
+static const uint16_t sec_inactivity_allow_sleep = STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN * 60;
 
 static uint16_t display_step_count_now(void) {
     char buf[10];
@@ -62,6 +70,18 @@ static void _step_counter_face_logging_update_display(step_counter_state_t *logg
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
+// The idea is that we can sleep only if we're not looking at the current step count or see enough time of inactivity
+static void allow_sleeping(bool sleeping_is_wanted, step_counter_state_t *logger_state) {
+    if (sleeping_is_wanted == logger_state->can_sleep) return;
+    if (sleeping_is_wanted) {
+        logger_state->can_sleep = true;
+        movement_cancel_background_task();
+    } else {
+        logger_state->can_sleep = false;
+        movement_schedule_background_task(distant_future);
+    }
+}
+
 void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr) {
     (void) watch_face_index;
     if (*context_ptr == NULL) {
@@ -73,6 +93,9 @@ void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr) {
 void step_counter_face_activate(void *context) {
     step_counter_state_t *logger_state = (step_counter_state_t *)context;
     logger_state->display_index = logger_state->data_points;
+    logger_state->sec_inactivity = 0;
+    logger_state->can_sleep = false;
+    movement_schedule_background_task(distant_future);
 }
 
 bool step_counter_face_loop(movement_event_t event, void *context) {
@@ -114,9 +137,18 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             if(displaying_curr_step_count) {
                 step_count = movement_get_step_count();
                 if (step_count != logger_state->step_count_prev) {
+                    allow_sleeping(false, logger_state);
+                    logger_state->sec_inactivity = 0;
                     logger_state->step_count_prev = display_step_count_now();
+                } else {
+                    if (logger_state->sec_inactivity >= sec_inactivity_allow_sleep) {
+                        allow_sleeping(true, logger_state);
+                    } else {
+                        logger_state->sec_inactivity++;
+                    }
                 }
-                break;
+            } else {
+                allow_sleeping(true, logger_state);
             }
             break;
         case EVENT_LOW_ENERGY_UPDATE:
@@ -136,6 +168,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 void step_counter_face_resign(void *context) {
     (void) context;
     movement_disable_step_count();
+    movement_cancel_background_task();
 }
 
 movement_watch_face_advisory_t step_counter_face_advise(void *context) {
