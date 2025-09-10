@@ -143,6 +143,6 @@ movement_watch_face_advisory_t step_counter_face_advise(void *context) {
     movement_watch_face_advisory_t retval = { 0 };
     watch_date_time_t date_time = movement_get_local_date_time();
     // To reset the step count at midnight (or 11:59 as a hack to retain the current day's data)
-    retval.wants_background_task = (date_time.unit.hour == 11 && date_time.unit.minute == 59);
+    retval.wants_background_task = (date_time.unit.hour == 23 && date_time.unit.minute == 59);
     return retval;
 }
