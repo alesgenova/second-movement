@@ -116,7 +116,7 @@ typedef struct {
 } accel_data_t;
 
 accel_data_t _accel_data;
-static uint16_t _total_step_count = 0;
+static uint32_t _total_step_count = 0;
 
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
@@ -997,7 +997,7 @@ void movement_reset_step_count(void) {
     _total_step_count = 0;
 }
 
-uint16_t movement_get_step_count(void) {
+uint32_t movement_get_step_count(void) {
     return _total_step_count;
 }
 

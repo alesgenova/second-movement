@@ -36,11 +36,11 @@
 
 typedef struct {
     uint8_t day;
-    uint16_t step_count;
+    uint32_t step_count;
 } step_counter_face_data_point_t;
 
 typedef struct {
-    uint16_t step_count_prev;
+    uint32_t step_count_prev;
     uint16_t sec_inactivity : 15;
     uint16_t can_sleep : 1;
     uint8_t display_index;  // the index we are displaying on screen

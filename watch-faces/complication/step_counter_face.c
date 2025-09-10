@@ -27,6 +27,7 @@
 #include "step_counter_face.h"
 
 #define STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN 5
+#define STEP_COUNTER_MAX_STEPS_DISPLAY 999999
 #define STEP_COUNTER_LOGGING_CYC (STEP_COUNTER_NUM_DATA_POINTS + 1)
 
 // distant future for background task: January 1, 2083
@@ -36,10 +37,16 @@ static const watch_date_time_t distant_future = {
 
 static const uint16_t sec_inactivity_allow_sleep = STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN * 60;
 
+static uint32_t get_step_count(void) {
+    uint32_t step_count = movement_get_step_count();
+    if (step_count > STEP_COUNTER_MAX_STEPS_DISPLAY) return STEP_COUNTER_MAX_STEPS_DISPLAY;
+    return step_count;
+}
+
 static uint16_t display_step_count_now(void) {
     char buf[10];
-    uint16_t step_count = movement_get_step_count();
-    sprintf(buf, "%6d", step_count);
+    uint32_t step_count = get_step_count();
+    sprintf(buf, "%6lu", step_count);
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
     return step_count;
 }
@@ -49,7 +56,7 @@ static void _step_counter_face_log_data(step_counter_state_t *logger_state) {
     size_t pos = logger_state->data_points % STEP_COUNTER_NUM_DATA_POINTS;
 
     logger_state->data[pos].day = date_time.unit.day;
-    logger_state->data[pos].step_count = movement_get_step_count();
+    logger_state->data[pos].step_count = get_step_count();
     logger_state->data_points++;
 }
 
@@ -66,7 +73,7 @@ static void _step_counter_face_logging_update_display(step_counter_state_t *logg
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "STP", "ST");
     sprintf(buf, "%2d", logger_state->data[pos].day);
     watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-    sprintf(buf, "%6d", logger_state->data[pos].step_count);
+    sprintf(buf, "%6lu", logger_state->data[pos].step_count);
     watch_display_text(WATCH_POSITION_BOTTOM, buf);
 }
 
@@ -101,7 +108,7 @@ void step_counter_face_activate(void *context) {
 bool step_counter_face_loop(movement_event_t event, void *context) {
     step_counter_state_t *logger_state = (step_counter_state_t *)context;
     bool displaying_curr_step_count = logger_state->display_index == logger_state->data_points;
-    uint16_t step_count;
+    uint32_t step_count;
     switch (event.event_type) {
         case EVENT_LIGHT_LONG_PRESS:
             // light button shows the timestamp, but if you need the light, long press it.
@@ -135,7 +142,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TICK:
             if(displaying_curr_step_count) {
-                step_count = movement_get_step_count();
+                step_count = get_step_count();
                 if (step_count != logger_state->step_count_prev) {
                     allow_sleeping(false, logger_state);
                     logger_state->sec_inactivity = 0;
