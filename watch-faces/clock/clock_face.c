@@ -281,7 +281,7 @@ bool clock_face_loop(movement_event_t event, void *context) {
 
 void clock_face_resign(void *context) {
     (void) context;
-    if (movement_get_count_steps()) {
+    if (movement_step_count_is_enabled()) {
         movement_disable_step_count();
     }
 }

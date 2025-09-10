@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2022 Joey Castillo
+ * Copyright (c) 2025 David Volovskiy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "step_counter_face.h"
-#include "watch.h"
 
 #define STEP_COUNTER_LOGGING_CYC (STEP_COUNTER_NUM_DATA_POINTS + 1)
 
@@ -109,7 +108,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 movement_move_to_next_face();
             } else {
                 _step_counter_face_logging_update_display(logger_state);
-//            }
+            }
             break;
         case EVENT_TICK:
             if(displaying_curr_step_count) {
@@ -119,6 +118,10 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 }
                 break;
             }
+            break;
+        case EVENT_LOW_ENERGY_UPDATE:
+            watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
+            movement_disable_step_count();
             break;
         case EVENT_BACKGROUND_TASK:
             _step_counter_face_log_data(logger_state);
@@ -132,6 +135,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 
 void step_counter_face_resign(void *context) {
     (void) context;
+    movement_disable_step_count();
 }
 
 movement_watch_face_advisory_t step_counter_face_advise(void *context) {
