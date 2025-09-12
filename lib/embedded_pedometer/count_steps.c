@@ -1,6 +1,7 @@
 #include "count_steps.h"
 #include "stdint.h"
 #include "stdio.h"  //using this for printing debug outputs
+#include <stdlib.h>
 
 //this algorithm is a simple adaptation of the following paper:
 //"RecoFit - Using a Wearable Sensor to Find, Recognize, and Count Repetitive Exercises"
@@ -18,7 +19,6 @@ static int32_t lpf[COUNT_STEPS_NUM_TUPLES]                    = {0};            
 static int64_t autocorr_buff[NUM_AUTOCORR_LAGS]   = {0};                        //holds the autocorrelation results
 static int64_t deriv[NUM_AUTOCORR_LAGS]           = {0};                        //holds derivative
 
-static uint32_t SquareRoot(uint32_t a_nInput);
 static void derivative(int64_t *autocorr_buff, int64_t *deriv);
 static void autocorr(int32_t *lpf, int64_t *autocorr_buff);
 static void remove_mean(int32_t *lpf);
@@ -26,40 +26,24 @@ static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf);
 static uint8_t get_precise_peakind(int64_t *autocorr_buff, uint8_t peak_ind);
 static void get_autocorr_peak_stats(int64_t *autocorr_buff, uint8_t *neg_slope_count, int64_t *delta_amplitude_right, uint8_t *pos_slope_count, int64_t *delta_amplitude_left, uint8_t peak_ind);
 
-//fixed point square root estimation from http://stackoverflow.com/questions/1100090/looking-for-an-efficient-integer-square-root-algorithm-for-arm-thumb2
-/**
- * \brief    Fast Square root algorithm
- *
- * Fractional parts of the answer are discarded. That is:
- *      - SquareRoot(3) --> 1
- *      - SquareRoot(4) --> 2
- *      - SquareRoot(5) --> 2
- *      - SquareRoot(8) --> 2
- *      - SquareRoot(9) --> 3
- *
- * \param[in] a_nInput - unsigned integer for which to find the square root
- *
- * \return Integer square root of the input value.
- */
-static uint32_t SquareRoot(uint32_t a_nInput) {
-    uint32_t op  = a_nInput;
-    uint32_t res = 0;
-    uint32_t one = 1uL << 30; // The second-to-top bit is set: use 1u << 14 for uint16_t type; use 1uL<<30 for uint32_t type
-    
-    // "one" starts at the highest power of four <= than the argument.
-    while (one > op) {
-        one >>= 2;
-    }
-    
-    while (one != 0) {
-        if (op >= res + one) {
-            op  = op - (res + one);
-            res = res +  2 * one;
-        }
-        res >>= 1;
-        one >>= 2;
-    }
-    return res;
+/* Approximate l2 norm */
+static uint32_t _approx_l2_norm(int8_t x, int8_t y, int8_t z)
+{
+    /* Absolute values */
+    uint32_t ax = abs(x);
+    uint32_t ay = abs(y);
+    uint32_t az = abs(z);
+
+    /* *INDENT-OFF* */
+    /* Sort values: ax >= ay >= az */
+    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
+    if (ay < az) { uint32_t t = ay; ay = az; az = t; }
+    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
+    /* *INDENT-ON* */
+
+    /* Approximate sqrt(x^2 + y^2 + z^2) */
+    /* alpha ≈ 0.9375 (15/16), beta ≈ 0.375 (3/8) */
+    return ax + ((15 * ay) >> 4) + ((3 * az) >> 3);
 }
 
 
@@ -195,13 +179,9 @@ static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf) {
 uint8_t count_steps(int8_t *data) {
     
     //assume data is in the format data = [x1,y1,z1,x2,y2,z2...etc]
-    //calculate the magnitude of each of triplet ie temp_mag = [x1^2+y1^2+z1^2]
-    //then temp_mag = sqrt(temp_mag)
     uint16_t i;
-    uint16_t temp_mag;
     for (i = 0; i < COUNT_STEPS_NUM_TUPLES; i++) {
-        temp_mag = (uint16_t)((uint16_t)data[i*3+0]*(uint16_t)data[i*3+0] + (uint16_t)data[i*3+1]*(uint16_t)data[i*3+1] + (uint16_t)data[i*3+2]*(uint16_t)data[i*3+2]);
-        mag_sqrt[i] = (uint8_t)SquareRoot(temp_mag);
+        mag_sqrt[i] = (uint8_t)_approx_l2_norm(data[i*3+0], data[i*3+1], data[i*3+2]);
     }
     
     //apply low pass filter to mag_sqrt, result is stored in lpf
