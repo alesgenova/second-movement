@@ -111,7 +111,7 @@ typedef struct {
 movement_volatile_state_t movement_volatile_state;
 
 typedef struct {
-    int8_t count;
+    uint16_t count;
     int8_t readings[COUNT_STEPS_NUM_TUPLES * 3];
 } accel_data_t;
 
@@ -973,6 +973,9 @@ static uint8_t movement_count_new_steps(void)
 
     lis2dw_read_fifo(&fifo);
     if (fifo.count == 0) {
+        if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
+            movement_disable_step_count();
+    }
         return new_steps;
     }
 
