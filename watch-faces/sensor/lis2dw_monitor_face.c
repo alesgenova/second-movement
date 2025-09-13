@@ -432,7 +432,7 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
         char sign = (state->reading.z) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.z));
     } else {
-        snprintf(buf, sizeof(buf), " %.6lu",  _approx_l2_norm(state->reading));
+        snprintf(buf, sizeof(buf), "%.6lu",  _approx_l2_norm(state->reading));
     }
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
 }
