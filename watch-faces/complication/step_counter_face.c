@@ -100,9 +100,6 @@ void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr) {
 void step_counter_face_activate(void *context) {
     step_counter_state_t *logger_state = (step_counter_state_t *)context;
     logger_state->display_index = logger_state->data_points;
-    logger_state->sec_inactivity = 0;
-    logger_state->can_sleep = false;
-    movement_schedule_background_task(distant_future);
 }
 
 bool step_counter_face_loop(movement_event_t event, void *context) {
@@ -117,7 +114,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
         case EVENT_LIGHT_BUTTON_DOWN:
             break;
         case EVENT_LIGHT_BUTTON_UP:
-            logger_state->display_index = (logger_state->display_index + logger_state->data_points - 1) % (logger_state->data_points + 1);
+            logger_state->display_index = (logger_state->display_index + logger_state->data_points) % (logger_state->data_points + 1);
             _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_ALARM_BUTTON_UP:
@@ -137,6 +134,9 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             if (!movement_enable_step_count()) {  // Skip this face if not enabled
                 movement_move_to_next_face();
             } else {
+                logger_state->sec_inactivity = 0;
+                logger_state->can_sleep = false;
+                movement_schedule_background_task(distant_future);
                 _step_counter_face_logging_update_display(logger_state);
             }
             break;
