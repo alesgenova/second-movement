@@ -44,6 +44,26 @@ static void _settings_title_display(lis2dw_monitor_state_t *state, char *buf1, c
     }
 }
 
+/* Approximate l2 norm */
+static uint32_t _approx_l2_norm(lis2dw_reading_t reading)
+{
+    /* Absolute values */
+    uint32_t ax = abs(reading.x);
+    uint32_t ay = abs(reading.y);
+    uint32_t az = abs(reading.z);
+
+    /* *INDENT-OFF* */
+    /* Sort values: ax >= ay >= az */
+    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
+    if (ay < az) { uint32_t t = ay; ay = az; az = t; }
+    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
+    /* *INDENT-ON* */
+
+    /* Approximate sqrt(x^2 + y^2 + z^2) */
+    /* alpha ≈ 0.9375 (15/16), beta ≈ 0.375 (3/8) */
+    return ax + ((15 * ay) >> 4) + ((3 * az) >> 3);
+}
+
 static bool _settings_blink(uint8_t subsecond)
 {
     if (subsecond % 2 == 0) {
@@ -387,7 +407,7 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
 {
     char buf[10];
 
-    snprintf(buf, sizeof(buf), " %C ", "XYZ"[state->axis]);
+    snprintf(buf, sizeof(buf), " %C ", "XYZA"[state->axis]);
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf, buf);
 
     snprintf(buf, sizeof(buf), "%2d", state->axis + 1);
@@ -408,9 +428,11 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
     } else if (state->axis == 1) {
         char sign = (state->reading.y) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.y));
-    } else {
+    } else if (state->axis == 2) {
         char sign = (state->reading.z) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.z));
+    } else {
+        snprintf(buf, sizeof(buf), " %.6lu",  _approx_l2_norm(state->reading));
     }
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
 }
@@ -474,7 +496,7 @@ static bool _monitor_loop(movement_event_t event, void *context)
             state->show_title = (state->show_title > 0) ? state->show_title - 1 : 0;
             break;
         case EVENT_ALARM_BUTTON_UP:
-            state->axis = (state->axis + 1) % 3;
+            state->axis = (state->axis + 1) % 4;
             _monitor_display(state);
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
