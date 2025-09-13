@@ -407,7 +407,7 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
 {
     char buf[10];
 
-    snprintf(buf, sizeof(buf), " %C ", "XYZA"[state->axis]);
+    snprintf(buf, sizeof(buf), " %c ", "XYZA"[state->axis]);
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf, buf);
 
     snprintf(buf, sizeof(buf), "%2d", state->axis + 1);
