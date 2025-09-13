@@ -102,10 +102,14 @@ const watch_face_t watch_faces[] = {
  */
 #define MOVEMENT_DEFAULT_LED_DURATION 1
 
-
-/* If True, then we count steps in the main face when not sleeping.
-*/
-#define MOVEMENT_DEFAULT_COUNT_STEPS true
+/* Sets how steps are counted when on the clock_face
+ * Valid values are:
+ * MOVEMENT_SC_OFF: Don't count steps on clock_face
+ * MOVEMENT_SC_ALWAYS: Always count steps on clock_face
+ * MOVEMENT_SC_DAYTIME: Count steps between MOVEMENT_STEP_COUNT_START and MOVEMENT_STEP_COUNT_END
+ * MOVEMENT_SC_NOT_INSTALLED: The LIS2DW isn't installed (the code handles this without it needing to be manally set)
+ */
+#define MOVEMENT_DEFAULT_COUNT_STEPS MOVEMENT_SC_OFF
 
 /* If the settings are set to use this start and end hor,
     We only count steps when the step counter face is on.
