@@ -116,8 +116,10 @@ typedef struct {
 } accel_data_t;
 
 accel_data_t _accel_data;
-static bool lis2dw_checked = false;
 static uint32_t _total_step_count = 0;
+#ifdef I2C_SERCOM
+static bool lis2dw_checked = false;
+#endif
 
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
@@ -969,9 +971,9 @@ bool movement_step_count_is_enabled(void) {
 
 static uint8_t movement_count_new_steps(void)
 {
-    lis2dw_fifo_t fifo = {0};
     uint8_t new_steps = 0;
-
+#ifdef I2C_SERCOM
+    lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
     if (fifo.count == 0) {
         if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
@@ -997,6 +999,7 @@ static uint8_t movement_count_new_steps(void)
         }
     }
     lis2dw_clear_fifo();
+#endif
     return new_steps;
 }
 
