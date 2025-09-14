@@ -27,6 +27,7 @@
 #include "lis2dw_monitor_face.h"
 #include "watch.h"
 #include "watch_utility.h"
+#include "count_steps.h"
 
 /* Display frequency */
 #define DISPLAY_FREQUENCY 8
@@ -42,26 +43,6 @@ static void _settings_title_display(lis2dw_monitor_state_t *state, char *buf1, c
         snprintf(buf, sizeof(buf), "%2d", state->settings_page + 1);
         watch_display_text_with_fallback(WATCH_POSITION_TOP_RIGHT, buf, buf);
     }
-}
-
-/* Approximate l2 norm */
-static uint32_t _approx_l2_norm(lis2dw_reading_t reading)
-{
-    /* Absolute values */
-    uint32_t ax = abs(reading.x);
-    uint32_t ay = abs(reading.y);
-    uint32_t az = abs(reading.z);
-
-    /* *INDENT-OFF* */
-    /* Sort values: ax >= ay >= az */
-    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
-    if (ay < az) { uint32_t t = ay; ay = az; az = t; }
-    if (ax < ay) { uint32_t t = ax; ax = ay; ay = t; }
-    /* *INDENT-ON* */
-
-    /* Approximate sqrt(x^2 + y^2 + z^2) */
-    /* alpha ≈ 0.9375 (15/16), beta ≈ 0.375 (3/8) */
-    return ax + ((15 * ay) >> 4) + ((3 * az) >> 3);
 }
 
 static bool _settings_blink(uint8_t subsecond)
@@ -432,7 +413,7 @@ static void _monitor_display(lis2dw_monitor_state_t *state)
         char sign = (state->reading.z) >= 0 ? ' ' : '-';
         snprintf(buf, sizeof(buf), "%c%.5d", sign, abs(state->reading.z));
     } else {
-        snprintf(buf, sizeof(buf), "%.6lu",  _approx_l2_norm(state->reading));
+        snprintf(buf, sizeof(buf), "%.6lu",  count_steps_approx_l2_norm(state->reading));
     }
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
 }

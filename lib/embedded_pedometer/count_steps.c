@@ -14,7 +14,6 @@
 
 static int8_t deriv_coeffs[DERIV_FILT_LEN]        = {-6,31,0,-31,6};            //coefficients of derivative filter from https://www.dsprelated.com/showarticle/814.php
 static int8_t lpf_coeffs[LPF_FILT_LEN]            = {-5,6,34,68,84,68,34,6,-5}; //coefficients of FIR low pass filter generated in matlab using FDATOOL
-static uint8_t mag_sqrt[COUNT_STEPS_NUM_TUPLES]               = {0};                        //this holds the square root of magnitude data of X,Y,Z (so its length is NUM_SAMPLES/3)
 static int32_t lpf[COUNT_STEPS_NUM_TUPLES]                    = {0};                        //hold the low pass filtered signal
 static int64_t autocorr_buff[NUM_AUTOCORR_LAGS]   = {0};                        //holds the autocorrelation results
 static int64_t deriv[NUM_AUTOCORR_LAGS]           = {0};                        //holds derivative
@@ -27,12 +26,12 @@ static uint8_t get_precise_peakind(int64_t *autocorr_buff, uint8_t peak_ind);
 static void get_autocorr_peak_stats(int64_t *autocorr_buff, uint8_t *neg_slope_count, int64_t *delta_amplitude_right, uint8_t *pos_slope_count, int64_t *delta_amplitude_left, uint8_t peak_ind);
 
 /* Approximate l2 norm */
-static uint32_t _approx_l2_norm(int8_t x, int8_t y, int8_t z)
+uint32_t count_steps_approx_l2_norm(lis2dw_reading_t reading)
 {
     /* Absolute values */
-    uint32_t ax = abs(x);
-    uint32_t ay = abs(y);
-    uint32_t az = abs(z);
+    uint32_t ax = abs(reading.x);
+    uint32_t ay = abs(reading.y);
+    uint32_t az = abs(reading.z);
 
     /* *INDENT-OFF* */
     /* Sort values: ax >= ay >= az */
@@ -176,13 +175,9 @@ static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf) {
 
 
 //algorithm interface
-uint8_t count_steps(int8_t *data) {
-    
-    //assume data is in the format data = [x1,y1,z1,x2,y2,z2...etc]
+uint8_t count_steps(uint8_t *mag_sqrt) {
+    //assume data is in the format data = [approx_l2_norm(x1,y1,z1),approx_l2_norm(x2,y2,z2)...etc]
     uint16_t i;
-    for (i = 0; i < COUNT_STEPS_NUM_TUPLES; i++) {
-        mag_sqrt[i] = (uint8_t)_approx_l2_norm(data[i*3+0], data[i*3+1], data[i*3+2]);
-    }
     
     //apply low pass filter to mag_sqrt, result is stored in lpf
     lowpassfilt(mag_sqrt, lpf);

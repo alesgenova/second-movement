@@ -112,7 +112,7 @@ movement_volatile_state_t movement_volatile_state;
 
 typedef struct {
     uint16_t count;
-    int8_t readings[COUNT_STEPS_NUM_TUPLES * 3];
+    uint8_t magnitude[COUNT_STEPS_NUM_TUPLES];
 } accel_data_t;
 
 accel_data_t _accel_data;
@@ -975,7 +975,7 @@ static uint8_t movement_count_new_steps(void)
 #ifdef I2C_SERCOM
     lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
-    if (fifo.count == 0) {
+    if (fifo.count == 0 || fifo.count > 32) {
         if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
             movement_state.has_lis2dw = false;
             movement_state.counting_steps = false;
@@ -987,15 +987,14 @@ static uint8_t movement_count_new_steps(void)
 
     /* Add up samples in fifo */
     for (uint8_t i = 0; i < fifo.count; i++) {
-        _accel_data.readings[_accel_data.count*3+0] = (int8_t)(fifo.readings[i].x / 16);
-        _accel_data.readings[_accel_data.count*3+1] = (int8_t)(fifo.readings[i].y / 16);
-        _accel_data.readings[_accel_data.count*3+2] = (int8_t)(fifo.readings[i].z / 16);
+        uint32_t magnitude = count_steps_approx_l2_norm(fifo.readings[i]);
+        // The algorithm wanted int8 inputs, but the readings are 12-bit, so we need to bit shift 4
+        _accel_data.magnitude[_accel_data.count] = (uint8_t)(magnitude >> 4);
         _accel_data.count++;
         if (_accel_data.count >= COUNT_STEPS_NUM_TUPLES) {
-            new_steps = count_steps(_accel_data.readings);
+            new_steps = count_steps(_accel_data.magnitude);
             _total_step_count += new_steps;
-            memset(&_accel_data, 0, sizeof(_accel_data));
-            //_accel_data.count = 0;
+            _accel_data.count = 0;
         }
     }
     lis2dw_clear_fifo();
