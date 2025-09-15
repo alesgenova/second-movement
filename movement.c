@@ -110,14 +110,9 @@ typedef struct {
 
 movement_volatile_state_t movement_volatile_state;
 
-typedef struct {
-    uint16_t count;
-    uint8_t magnitude[COUNT_STEPS_NUM_TUPLES];
-} accel_data_t;
-
-accel_data_t _accel_data;
 static uint32_t _total_step_count = 0;
 #ifdef I2C_SERCOM
+count_steps_magnitude_data_t _accel_data;
 static const uint8_t movement_max_step_fifo_misreads = 3;
 static uint8_t movement_step_fifo_misreads = 0;
 #endif
@@ -976,13 +971,12 @@ static uint8_t movement_count_new_steps(void)
 #ifdef I2C_SERCOM
     lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
+    lis2dw_clear_fifo();
     if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
         if (movement_step_fifo_misreads != CHAR_MAX) movement_step_fifo_misreads++;
-        if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads) {
-            movement_step_fifo_misreads = movement_max_step_fifo_misreads; // To avoid overflows
-            if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
-                movement_disable_step_count();
-            }
+        if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads 
+            && lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
+            movement_disable_step_count();
         }
         return new_steps;
     }
@@ -1000,7 +994,6 @@ static uint8_t movement_count_new_steps(void)
             _accel_data.count = 0;
         }
     }
-    lis2dw_clear_fifo();
 #endif
     return new_steps;
 }

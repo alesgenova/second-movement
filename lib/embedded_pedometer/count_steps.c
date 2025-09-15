@@ -220,7 +220,7 @@ uint8_t count_steps(uint8_t *mag_sqrt) {
     if ((pos_slope_count > AUTOCORR_MIN_HALF_LEN) && (neg_slope_count > AUTOCORR_MIN_HALF_LEN) && (delta_amplitude_right > AUTOCORR_DELTA_AMPLITUDE_THRESH) && (delta_amplitude_left > AUTOCORR_DELTA_AMPLITUDE_THRESH)) {
         //the period is peak_ind/COUNT_STEPS_SAMPLING_RATE seconds. that corresponds to a frequency of 1/period
         //with the frequency known, and the number of seconds is 4 seconds, you can then find out the number of steps
-        num_steps = (COUNT_STEPS_SAMPLING_RATE*COUNT_STEPS_WINDOW_LENGTH)/peak_ind;
+        num_steps = (COUNT_STEPS_NUM_TUPLES)/peak_ind;
     } else {
         //not a valid autocorrelation peak
         num_steps = 0;
