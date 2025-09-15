@@ -118,7 +118,8 @@ typedef struct {
 accel_data_t _accel_data;
 static uint32_t _total_step_count = 0;
 #ifdef I2C_SERCOM
-static bool lis2dw_checked = false;
+static const uint8_t movement_max_step_fifo_misreads = 3;
+static uint8_t movement_step_fifo_misreads = 0;
 #endif
 
 // The last sequence that we have been asked to play while the watch was in deep sleep
@@ -975,16 +976,18 @@ static uint8_t movement_count_new_steps(void)
 #ifdef I2C_SERCOM
     lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
-    if (fifo.count == 0 || fifo.count > 32) {
-        if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
-            movement_state.has_lis2dw = false;
-            movement_state.counting_steps = false;
-            lis2dw_checked = false;
-            watch_disable_i2c();
+    if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
+        if (movement_step_fifo_misreads != CHAR_MAX) movement_step_fifo_misreads++;
+        if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads) {
+            movement_step_fifo_misreads = movement_max_step_fifo_misreads; // To avoid overflows
+            if (lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
+                movement_disable_step_count();
+            }
         }
         return new_steps;
     }
 
+    movement_step_fifo_misreads = 0;
     /* Add up samples in fifo */
     for (uint8_t i = 0; i < fifo.count; i++) {
         uint32_t magnitude = count_steps_approx_l2_norm(fifo.readings[i]);
@@ -1202,6 +1205,7 @@ void app_setup(void) {
         watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
 
 #ifdef I2C_SERCOM
+        static bool lis2dw_checked = false;
         if (!lis2dw_checked) {
             watch_enable_i2c();
             if (lis2dw_begin()) {
