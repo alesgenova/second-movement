@@ -35,6 +35,7 @@ static const watch_date_time_t distant_future = {
     .unit = {0, 0, 0, 1, 1, 63}
 };
 
+static bool sensor_not_seen;
 static const uint16_t sec_inactivity_allow_sleep = STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN * 60;
 
 static uint32_t get_step_count(void) {
@@ -46,8 +47,12 @@ static uint32_t get_step_count(void) {
 static uint16_t display_step_count_now(void) {
     char buf[10];
     uint32_t step_count = get_step_count();
-    sprintf(buf, "%6lu", step_count);
-    watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    if (sensor_not_seen) {
+        watch_display_text(WATCH_POSITION_BOTTOM, "NO SNS");
+    } else {
+        sprintf(buf, "%6lu", step_count);
+        watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    }
     return step_count;
 }
 
@@ -130,10 +135,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             break;
         case EVENT_ACTIVATE:
-            if (!movement_enable_step_count()) {  // Skip this face if not enabled
-                movement_move_to_next_face();
-                return false;
-            }
+            sensor_not_seen = !movement_enable_step_count();
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
             logger_state->can_sleep = false;
