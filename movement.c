@@ -971,29 +971,32 @@ static uint8_t movement_count_new_steps(void)
 #ifdef I2C_SERCOM
     lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
-    lis2dw_clear_fifo();
     if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
         if (movement_step_fifo_misreads != CHAR_MAX) movement_step_fifo_misreads++;
-        if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads 
-            && lis2dw_get_device_id() != LIS2DW_WHO_AM_I_VAL) {
-            movement_disable_step_count();
+        if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads) {
+            if (lis2dw_get_device_id() == LIS2DW_WHO_AM_I_VAL) {
+                movement_disable_step_count();
+            } else {
+                movement_state.counting_steps = false;
+            }
+            return new_steps;
         }
-        return new_steps;
-    }
-
-    movement_step_fifo_misreads = 0;
-    /* Add up samples in fifo */
-    for (uint8_t i = 0; i < fifo.count; i++) {
-        uint32_t magnitude = count_steps_approx_l2_norm(fifo.readings[i]);
-        // The algorithm wanted int8 inputs, but the readings are 12-bit, so we need to bit shift 4
-        _accel_data.magnitude[_accel_data.count] = (uint8_t)(magnitude >> 4);
-        _accel_data.count++;
-        if (_accel_data.count >= COUNT_STEPS_NUM_TUPLES) {
-            new_steps = count_steps(_accel_data.magnitude);
-            _total_step_count += new_steps;
-            _accel_data.count = 0;
+    } else {
+        movement_step_fifo_misreads = 0;
+        /* Add up samples in fifo */
+        for (uint8_t i = 0; i < fifo.count; i++) {
+            uint32_t magnitude = count_steps_approx_l2_norm(fifo.readings[i]);
+            // The algorithm wanted int8 inputs, but the readings are 12-bit, so we need to bit shift 4
+            _accel_data.magnitude[_accel_data.count] = (uint8_t)(magnitude >> 4);
+            _accel_data.count++;
+            if (_accel_data.count >= COUNT_STEPS_NUM_TUPLES) {
+                new_steps = count_steps(_accel_data.magnitude);
+                _total_step_count += new_steps;
+                _accel_data.count = 0;
+            }
         }
     }
+    lis2dw_clear_fifo();
 #endif
     return new_steps;
 }
