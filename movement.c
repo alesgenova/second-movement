@@ -436,7 +436,7 @@ void movement_force_led_off(void) {
 
 bool movement_default_loop_handler(movement_event_t event) {
     switch (event.event_type) {
-        case EVENT_MODE_BUTTON_UP:
+        case EVENT_MODE_BUTTON_DOWN:
             movement_move_to_next_page();
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
