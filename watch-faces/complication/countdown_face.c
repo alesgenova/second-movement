@@ -29,6 +29,7 @@
 #include "countdown_face.h"
 #include "watch.h"
 #include "watch_utility.h"
+#include "watch_common_display.h"
 
 #define CD_SELECTIONS 3
 #define DEFAULT_MINUTES 3
@@ -92,7 +93,64 @@ static void start(countdown_state_t *state) {
     schedule_countdown(state);
 }
 
+static watch_date_time_t clock_24h_to_12h(watch_date_time_t date_time) {
+    date_time.unit.hour %= 12;
 
+    if (date_time.unit.hour == 0) {
+        date_time.unit.hour = 12;
+    }
+
+    return date_time;
+}
+
+static void countdown_draw_time_classic() {
+    watch_date_time_t date_time = movement_get_local_date_time();
+
+    char buf[2 + 1];
+
+    snprintf(
+        buf,
+        sizeof(buf),
+        "%2d",
+        date_time.unit.minute
+    );
+
+    if (buf[0] == '4') {
+        // '4' gets rendered the same as '3' at this position, pick a different character to distinguish them
+        buf[0] = 'k';
+    }
+
+    watch_display_character(buf[0], 2);
+    watch_display_character(buf[1], 3);
+}
+
+static void countdown_draw_time_custom() {
+    watch_date_time_t date_time = movement_get_local_date_time();
+
+    if (movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_12H) {
+        date_time = clock_24h_to_12h(date_time);
+    }
+
+    char buf[5 + 1] = "T    ";
+
+    snprintf(
+        buf + 1,
+        sizeof(buf) - 1,
+        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d" : "%2d%02d",
+        date_time.unit.hour,
+        date_time.unit.minute
+    );
+
+    watch_display_text_with_fallback(WATCH_POSITION_TOP, buf, "");
+}
+
+static void countdown_draw_time() {
+    if (watch_get_lcd_type() == WATCH_LCD_TYPE_CUSTOM) {
+        countdown_draw_time_custom();
+    } else {
+        countdown_draw_time_classic();
+    }
+}
 
 static void draw(countdown_state_t *state, uint8_t subsecond) {
     char buf[16];
@@ -251,6 +309,7 @@ bool countdown_face_loop(movement_event_t event, void *context) {
             }
 
             draw(state, event.subsecond);
+            countdown_draw_time();
             break;
         case EVENT_MODE_BUTTON_UP:
             abort_quick_ticks(state);
