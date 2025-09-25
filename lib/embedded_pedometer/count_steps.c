@@ -173,11 +173,25 @@ static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf) {
     }
 }
 
+static bool allzeroes(uint8_t *mag_sqrt) {
+    uint16_t n;
+    bool all_zero = true;
+    for (n = 0; n < COUNT_STEPS_NUM_TUPLES; n++) {
+        if (mag_sqrt[n] != 0) {
+            all_zero = false;
+            break;
+        }
+    }
+    return allzeroes;
+}
 
 //algorithm interface
 uint8_t count_steps(uint8_t *mag_sqrt) {
     //assume data is in the format data = [approx_l2_norm(x1,y1,z1),approx_l2_norm(x2,y2,z2)...etc]
     uint16_t i;
+
+    //check if all of the values are zero (which means the data is empty)
+    if (allzeroes(mag_sqrt)) return 0;
     
     //apply low pass filter to mag_sqrt, result is stored in lpf
     lowpassfilt(mag_sqrt, lpf);
