@@ -12,6 +12,13 @@
 #define AUTOCORR_DELTA_AMPLITUDE_THRESH 7e8 //this is the min delta between peak and trough of autocorrelation peak
 #define AUTOCORR_MIN_HALF_LEN   3           //this is the min number of points the autocorrelation peak should be on either side of the peak
 
+#define SIMPLE_THRESHOLD                15000
+#define SIMPLE_THRESHOLD_MULT           1.5
+#define SIMPLE_SAMP_IGNORE_STEP         2
+#define USE_WINDOW_AVG                  true
+#define AVG_WINDOW_SIZE_SHIFT           7
+#define AVG_WINDOW_SIZE                 127  //(2^AVG_WINDOW_SIZE_SHIFT) - 1
+
 static int8_t deriv_coeffs[DERIV_FILT_LEN]        = {-6,31,0,-31,6};            //coefficients of derivative filter from https://www.dsprelated.com/showarticle/814.php
 static int8_t lpf_coeffs[LPF_FILT_LEN]            = {-5,6,34,68,84,68,34,6,-5}; //coefficients of FIR low pass filter generated in matlab using FDATOOL
 static int32_t lpf[COUNT_STEPS_NUM_TUPLES]                    = {0};                        //hold the low pass filtered signal
@@ -24,6 +31,8 @@ static void remove_mean(int32_t *lpf);
 static void lowpassfilt(uint8_t *mag_sqrt, int32_t *lpf);
 static uint8_t get_precise_peakind(int64_t *autocorr_buff, uint8_t peak_ind);
 static void get_autocorr_peak_stats(int64_t *autocorr_buff, uint8_t *neg_slope_count, int64_t *delta_amplitude_right, uint8_t *pos_slope_count, int64_t *delta_amplitude_left, uint8_t peak_ind);
+
+static uint32_t step_counter_threshold = SIMPLE_THRESHOLD;
 
 /* Approximate l2 norm */
 uint32_t count_steps_approx_l2_norm(lis2dw_reading_t reading)
@@ -182,7 +191,7 @@ static bool allzeroes(uint8_t *mag_sqrt) {
             break;
         }
     }
-    return allzeroes;
+    return all_zero;
 }
 
 //algorithm interface
@@ -242,6 +251,33 @@ uint8_t count_steps(uint8_t *mag_sqrt) {
     
     //printf("num steps: %i\n", num_steps);
     return num_steps;
+}
+
+uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
+    uint8_t new_steps = 0;
+#if USE_WINDOW_AVG
+    uint8_t samples_processed = 0;
+    uint32_t samples_sum = 0;
+#endif
+    for (uint8_t i = 0; i < fifo_data->count; i++) {
+        uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
+#if USE_WINDOW_AVG
+        samples_processed += 1;
+        samples_sum += magnitude;
+#endif
+        if (magnitude >= step_counter_threshold) {
+            new_steps += 1;
+            i += SIMPLE_SAMP_IGNORE_STEP;
+        }
+    }
+#if USE_WINDOW_AVG
+    if (samples_processed > 0) {
+        samples_sum /= samples_processed;
+        samples_sum *= SIMPLE_THRESHOLD_MULT;
+        step_counter_threshold = ((step_counter_threshold * AVG_WINDOW_SIZE) + samples_sum) >> AVG_WINDOW_SIZE_SHIFT;
+    }
+#endif
+    return new_steps;
 }
 
 

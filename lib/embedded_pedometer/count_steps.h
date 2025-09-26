@@ -15,5 +15,6 @@ typedef struct {
 
 uint32_t count_steps_approx_l2_norm(lis2dw_reading_t reading);
 uint8_t count_steps(uint8_t *mag_sqrt);
+uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data);
 
 #endif /* count_steps_h */
