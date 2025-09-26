@@ -12,12 +12,12 @@
 #define AUTOCORR_DELTA_AMPLITUDE_THRESH 7e8 //this is the min delta between peak and trough of autocorrelation peak
 #define AUTOCORR_MIN_HALF_LEN   3           //this is the min number of points the autocorrelation peak should be on either side of the peak
 
-#define SIMPLE_THRESHOLD                15000
-#define SIMPLE_THRESHOLD_MULT           1.5
-#define SIMPLE_SAMP_IGNORE_STEP         2
-#define USE_WINDOW_AVG                  true
-#define AVG_WINDOW_SIZE_SHIFT           7
-#define AVG_WINDOW_SIZE                 127  //(2^AVG_WINDOW_SIZE_SHIFT) - 1
+#define SIMPLE_THRESHOLD                15000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
+#define SIMPLE_THRESHOLD_MULT           1.5 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
+#define SIMPLE_SAMP_IGNORE_STEP         2   // After detecting a step, ignore this many samples to avoid double counting
+#define USE_WINDOW_AVG                  true   // If true, the step detection threshold will be adjusted based on a moving average of the signal magnitude
+#define AVG_WINDOW_SIZE_SHIFT           7  // The size of the moving average window. We are using bitshifting to keep the math efficient since we run once a second
+#define AVG_WINDOW_SIZE                 ((1 << AVG_WINDOW_SIZE_SHIFT) - 1)
 
 static int8_t deriv_coeffs[DERIV_FILT_LEN]        = {-6,31,0,-31,6};            //coefficients of derivative filter from https://www.dsprelated.com/showarticle/814.php
 static int8_t lpf_coeffs[LPF_FILT_LEN]            = {-5,6,34,68,84,68,34,6,-5}; //coefficients of FIR low pass filter generated in matlab using FDATOOL
