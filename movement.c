@@ -114,6 +114,7 @@ static uint32_t _total_step_count = 0;
 #ifdef I2C_SERCOM
 static const uint8_t movement_max_step_fifo_misreads = 3;
 static uint8_t movement_step_fifo_misreads = 0;
+static bool is_stepping = false;
 #endif
 
 // The last sequence that we have been asked to play while the watch was in deep sleep
@@ -945,6 +946,7 @@ bool movement_enable_step_count(void) {
         lis2dw_set_range(LIS2DW_RANGE_4_G);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
         movement_state.counting_steps = true;
+        movement_set_accelerometer_motion_threshold(1); // 0.03Gs; Used to see if the watch is awake.
         lis2dw_enable_fifo();
         lis2dw_clear_fifo();
         return true;
@@ -968,6 +970,15 @@ static uint8_t movement_count_new_steps(void)
 {
     uint8_t new_steps = 0;
 #ifdef I2C_SERCOM
+    bool is_stepping_prev = is_stepping;
+    is_stepping = !HAL_GPIO_A4_read();
+    if (!is_stepping) {
+        return new_steps;
+    }
+    if (!is_stepping_prev) {
+        lis2dw_clear_fifo();  // likely stale data at this point.
+        return new_steps;
+    }
     lis2dw_fifo_t fifo = {0};
     lis2dw_read_fifo(&fifo);
     if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
