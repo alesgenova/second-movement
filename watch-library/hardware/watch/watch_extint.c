@@ -60,6 +60,14 @@ void watch_register_interrupt_callback(const uint8_t pin, watch_cb_t callback, e
     }
 }
 
+void watch_unregister_interrupt_callback(const uint8_t pin) {
+    int8_t channel = eic_get_channel_for_pin(pin);
+    if (channel >= 0 && channel < 16) {
+        eic_disable_interrupt(pin);
+        eic_callbacks[channel] = NULL;
+    }
+}
+
 void watch_eic_callback(uint8_t channel) {
     if (eic_callbacks[channel] != NULL) {
         eic_callbacks[channel]();
