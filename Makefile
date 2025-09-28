@@ -114,6 +114,7 @@ SRCS += \
 
 
 SRCS += ./watch-library/shared/driver/lis2dw.c
+SRCS += ./watch-library/shared/driver/lis2duxs12_reg.c
 
 ifdef EMSCRIPTEN
 
