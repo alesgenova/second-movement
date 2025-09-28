@@ -467,6 +467,24 @@ static bool _monitor_loop(movement_event_t event, void *context)
 
     switch (event.event_type) {
         case EVENT_ACTIVATE:
+            if (!movement_has_lis2dw()) {  // Skip the lis2dw isn't installed
+                movement_move_to_next_face();
+                return false;
+            }
+
+            /* Setup lis2dw to run in background at 12.5 Hz sampling rate. */
+            movement_set_accelerometer_background_rate(LIS2DW_DATA_RATE_12_5_HZ);
+
+            /* Enable fifo and clear it. */
+            lis2dw_enable_fifo();
+            lis2dw_clear_fifo();
+
+            /* Print lis2dw status to console. */
+            _lis2dw_get_state(&state->ds);
+            _lis2dw_print_state(&state->ds);
+
+            /* Switch to monitor page. */
+            _switch_to_monitor(state);
             watch_clear_colon();
             _monitor_update(state);
             _monitor_display(state);
@@ -570,26 +588,7 @@ void lis2dw_monitor_face_setup(uint8_t watch_face_index, void **context_ptr)
 
 void lis2dw_monitor_face_activate(void *context)
 {
-    if (!movement_has_lis2dux()) {  // Skip the lis2dw isn't installed
-        movement_move_to_next_face();
-        return;
-    }
-
-    lis2dw_monitor_state_t *state = (lis2dw_monitor_state_t *) context;
-
-    /* Setup lis2dw to run in background at 12.5 Hz sampling rate. */
-    movement_set_accelerometer_background_rate(LIS2DW_DATA_RATE_12_5_HZ);
-
-    /* Enable fifo and clear it. */
-    lis2dw_enable_fifo();
-    lis2dw_clear_fifo();
-
-    /* Print lis2dw status to console. */
-    _lis2dw_get_state(&state->ds);
-    _lis2dw_print_state(&state->ds);
-
-    /* Switch to monitor page. */
-    _switch_to_monitor(state);
+    (void) context;
 }
 
 bool lis2dw_monitor_face_loop(movement_event_t event, void *context)
