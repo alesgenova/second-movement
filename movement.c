@@ -1049,14 +1049,8 @@ bool movement_enable_step_count(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
-        if(LIS2DUXS12Sensor_Enable_X(&ctx) != LIS2DUXS12_STATUS_OK) {
-            printf("Failed LIS2DUXS12Sensor_Enable_X\r\n");
-            return false;
-        }
-        if(LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN) != LIS2DUXS12_STATUS_OK) {
-            printf("Failed LIS2DUXS12Sensor_Enable_Pedometer\r\n");
-            return false;
-        }
+        LIS2DUXS12Sensor_Enable_X(&ctx);
+        LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN);
         movement_state.counting_steps = true;
         return true;
     }
@@ -1079,17 +1073,10 @@ bool movement_disable_step_count(void) {
     }
     else if (movement_state.has_lis2dux) {
         bool retval = true;
-        printf("movement_disable_step_count\r\n");
         movement_state.counting_steps = false;
-        if(LIS2DUXS12Sensor_Disable_Pedometer(&ctx) != LIS2DUXS12_STATUS_OK) {
-            printf("Failed LIS2DUXS12Sensor_Disable_Pedometer\r\n");
-            retval = false;
-        }
-        if(LIS2DUXS12Sensor_Disable_X(&ctx) != LIS2DUXS12_STATUS_OK) {
-            printf("Failed LIS2DUXS12Sensor_Disable_X\r\n");
-            retval = false;
-        }
-        return retval;
+        LIS2DUXS12Sensor_Disable_Pedometer(&ctx);
+        LIS2DUXS12Sensor_Disable_X(&ctx);
+        return true;
     }
 #endif
     return false;
@@ -1147,10 +1134,7 @@ void movement_reset_step_count(void) {
     }
     else if (movement_state.has_lis2dux) {
         LIS2DUXS12StatusTypeDef result;
-        result = LIS2DUXS12Sensor_Step_Counter_Reset(&ctx);
-        if (result != LIS2DUXS12_STATUS_OK) {
-            printf("Failed LIS2DUXS12Sensor_Step_Counter_Reset\r\n");
-        }
+        LIS2DUXS12Sensor_Step_Counter_Reset(&ctx);
     }
 #endif
     _total_step_count = 0;
@@ -1163,15 +1147,10 @@ uint32_t movement_get_step_count(void) {
     }
     else if (movement_state.has_lis2dux) {
         uint16_t step_count = 0;
-        if (LIS2DUXS12Sensor_Get_Step_Count(&ctx, &step_count) == LIS2DUXS12_STATUS_OK) {
-            _total_step_count = step_count;
-        }
-        else {
-            printf("Failed LIS2DUXS12Sensor_Get_Step_Count\r\n");
-        }
+        LIS2DUXS12Sensor_Get_Step_Count(&ctx, &step_count);
+        _total_step_count = step_count;
     }
 #endif
-    printf("Steps: %lu\r\n", _total_step_count);
     return _total_step_count;
 }
 
@@ -1437,16 +1416,9 @@ void app_setup(void) {
         printf("init lis2dux_checked: %d\r\n", lis2dux_checked);
         if (!lis2dux_checked) {
             watch_enable_i2c();
-            if (LIS2DUXS12Sensor_Begin(&ctx) == LIS2DUXS12_STATUS_OK) {
-                printf("Began LIS2DUXS12Sensor :)\r\n");
-                movement_state.has_lis2dux = true;
-            } else {
-                printf("Failed LIS2DUXS12Sensor_Begin\r\n");
-                movement_state.has_lis2dux = false;
-                watch_disable_i2c();
-            }
+            LIS2DUXS12Sensor_Begin(&ctx);
+            movement_state.has_lis2dux = true;
             lis2dux_checked = true;
-            printf("lis2dux_checked: %d\r\n", lis2dux_checked);
         } else if (movement_state.has_lis2dux) {
             watch_enable_i2c();
             (LIS2DUXS12Sensor_Begin(&ctx));
@@ -1888,7 +1860,9 @@ void cb_accelerometer_event(void) {
     movement_volatile_state.has_pending_accelerometer = true;
 }
 
+#define PRINT_LIS2DUX_EVENTS false
 void cb_accelerometer_lis2dux_event(void) {
+#ifdef PRINT_LIS2DUX_EVENTS
     printf("cb_accelerometer_lis2dux_event\r\n");
     lis2duxs12_all_sources_t int_src;
     lis2duxs12_all_sources_get(&ctx, &int_src);
@@ -1909,7 +1883,7 @@ void cb_accelerometer_lis2dux_event(void) {
     if (int_src.fifo_full)     printf("fifo_full:     %d\r\n", int_src.fifo_full);
     if (int_src.fifo_ovr)      printf("fifo_ovr:      %d\r\n", int_src.fifo_ovr);
     if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
-
+#endif
 
     if (int_src.single_tap) {
         movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
