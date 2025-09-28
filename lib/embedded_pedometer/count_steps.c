@@ -14,7 +14,7 @@
 
 #define SIMPLE_THRESHOLD                15000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
 #define SIMPLE_THRESHOLD_MULT           1.5 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
-#define SIMPLE_SAMP_IGNORE_STEP         2   // After detecting a step, ignore this many samples to avoid double counting
+#define SIMPLE_SAMP_IGNORE_STEP         3   // After detecting a step, ignore this many samples to avoid double counting
 #define USE_WINDOW_AVG                  true   // If true, the step detection threshold will be adjusted based on a moving average of the signal magnitude
 #define AVG_WINDOW_SIZE_SHIFT           7  // The size of the moving average window. We are using bitshifting to keep the math efficient since we run once a second
 #define AVG_WINDOW_SIZE                 ((1 << AVG_WINDOW_SIZE_SHIFT) - 1)
