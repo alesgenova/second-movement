@@ -570,6 +570,11 @@ void lis2dw_monitor_face_setup(uint8_t watch_face_index, void **context_ptr)
 
 void lis2dw_monitor_face_activate(void *context)
 {
+    if (!movement_has_lis2dux()) {  // Skip the lis2dw isn't installed
+        movement_move_to_next_face();
+        return;
+    }
+
     lis2dw_monitor_state_t *state = (lis2dw_monitor_state_t *) context;
 
     /* Setup lis2dw to run in background at 12.5 Hz sampling rate. */

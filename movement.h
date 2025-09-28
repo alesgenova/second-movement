@@ -416,6 +416,9 @@ void movement_set_alarm_enabled(bool value);
 bool movement_enable_tap_detection_if_available(void);
 bool movement_disable_tap_detection_if_available(void);
 
+bool movement_has_lis2dw(void);
+bool movement_has_lis2dux(void);
+
 // gets and sets the accelerometer data rate in the background
 uint8_t movement_get_accelerometer_background_rate(void);
 bool movement_set_accelerometer_background_rate(uint8_t new_rate);

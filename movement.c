@@ -972,6 +972,14 @@ bool movement_disable_tap_detection_if_available(void) {
     return false;
 }
 
+bool movement_has_lis2dw(void) {
+    return movement_state.has_lis2dw;
+}
+
+bool movement_has_lis2dux(void) {
+    return movement_state.has_lis2dux;
+}
+
 uint8_t movement_get_accelerometer_background_rate(void) {
     if (movement_state.has_lis2dw || movement_state.has_lis2dux) return movement_state.accelerometer_background_rate;
     else return LIS2DW_DATA_RATE_POWERDOWN;
@@ -1072,7 +1080,6 @@ bool movement_disable_step_count(void) {
         return movement_disable_tap_detection_if_available();
     }
     else if (movement_state.has_lis2dux) {
-        bool retval = true;
         movement_state.counting_steps = false;
         LIS2DUXS12Sensor_Disable_Pedometer(&ctx);
         LIS2DUXS12Sensor_Disable_X(&ctx);
@@ -1129,11 +1136,7 @@ static uint8_t movement_count_new_steps_lis2dw(void)
 
 void movement_reset_step_count(void) {
 #ifdef I2C_SERCOM
-    if (movement_state.has_lis2dw) {
-         _total_step_count = 0;
-    }
-    else if (movement_state.has_lis2dux) {
-        LIS2DUXS12StatusTypeDef result;
+    if (movement_state.has_lis2dux) {
         LIS2DUXS12Sensor_Step_Counter_Reset(&ctx);
     }
 #endif
