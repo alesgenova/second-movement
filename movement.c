@@ -1451,9 +1451,10 @@ void app_setup(void) {
             };
             lis2duxs12_sixd_config_set(&ctx, sixd);
 
-            lis2duxs12_pin_int_route_t int2_route = {0};
-            int2_route.sleep_change = 1;
-            lis2duxs12_pin_int2_route_set(&ctx, &int2_route);
+            lis2duxs12_pin_int_route_t val;
+            lis2duxs12_pin_int2_route_get(&ctx, &val);
+            val.sleep_change = PROPERTY_ENABLE;
+            lis2duxs12_pin_int2_route_set(&ctx, &val);
             HAL_GPIO_A4_in();
             // watch_register_extwake_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake, false);
 
