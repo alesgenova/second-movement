@@ -95,6 +95,7 @@ typedef struct {
     volatile rtc_counter_t minute_counter;
     volatile bool minute_alarm_fired;
     volatile bool tick_fired_second;
+    volatile bool step_count_needs_updating;
     volatile bool is_buzzing;
     volatile uint8_t pending_sequence_priority;
     volatile bool schedule_next_comp;
@@ -1145,11 +1146,9 @@ void movement_reset_step_count(void) {
 
 uint32_t movement_get_step_count(void) {
 #ifdef I2C_SERCOM
-    if (movement_state.has_lis2dw) {
-        return _total_step_count;
-    }
-    else if (movement_state.has_lis2dux) {
-        uint16_t step_count = 0;
+    if (movement_state.has_lis2dux && movement_volatile_state.step_count_needs_updating) {
+        movement_volatile_state.step_count_needs_updating = false;
+        uint16_t step_count;
         LIS2DUXS12Sensor_Get_Step_Count(&ctx, &step_count);
         _total_step_count = step_count;
     }
@@ -1218,6 +1217,7 @@ void app_init(void) {
     movement_volatile_state.has_pending_accelerometer = false;
     movement_volatile_state.is_sleeping = false;
 
+    movement_volatile_state.step_count_needs_updating = false;
     movement_volatile_state.is_buzzing = false;
     movement_volatile_state.pending_sequence_priority = 0;
 
@@ -1460,12 +1460,10 @@ void app_setup(void) {
             watch_register_interrupt_callback(HAL_GPIO_A3_pin(), cb_accelerometer_lis2dux_event, INTERRUPT_TRIGGER_BOTH);
 
             // Enable the interrupts...
-            lis2duxs12_int_config_t int_en = {
-                .int_cfg = LIS2DUXS12_INT_LEVEL,
-                .sleep_status_on_int = 0,
-                .dis_rst_lir_all_int = 1
-            };
-            lis2duxs12_int_config_set(&ctx, &int_en);
+            lis2duxs12_int_config_t int_conf;
+            lis2duxs12_int_config_get(&ctx, &int_conf);
+            int_conf.int_cfg = LIS2DUXS12_INT_LEVEL;
+            lis2duxs12_int_config_set(&ctx, &int_conf);
         }
 #endif
 
@@ -1887,6 +1885,8 @@ void cb_accelerometer_lis2dux_event(void) {
     if (int_src.fifo_ovr)      printf("fifo_ovr:      %d\r\n", int_src.fifo_ovr);
     if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
 #endif
+
+    if (movement_state.counting_steps) movement_volatile_state.step_count_needs_updating = true;
 
     if (int_src.single_tap) {
         movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
