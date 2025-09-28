@@ -67,6 +67,7 @@ static void _step_counter_face_log_data(step_counter_state_t *logger_state) {
 static void _step_counter_face_logging_update_display(step_counter_state_t *logger_state) {
     if (logger_state->display_index == logger_state->data_points) {
         logger_state->step_count_prev = display_step_count_now();
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, "  "); // To clear the date on the classic display
         watch_display_text_with_fallback(WATCH_POSITION_TOP, "STEP ", "SC");
         return;
     }
