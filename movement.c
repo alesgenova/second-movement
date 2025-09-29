@@ -1044,7 +1044,7 @@ bool movement_enable_step_count(void) {
     if (movement_state.has_lis2dw) {
         // ramp data rate up to 400 Hz and high performance mode
         lis2dw_set_low_noise_mode(true);
-        lis2dw_set_data_rate(LIS2DW_DATA_RATE_12_5_HZ);
+        lis2dw_set_data_rate(LIS2DW_DATA_RATE_12_5_HZ);  // Change MAX_FIFO_SIZE_SIMPLE if you change this
         lis2dw_set_filter_type(LIS2DW_FILTER_LOW_PASS);
         lis2dw_set_low_power_mode(LIS2DW_LP_MODE_1);
         lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
@@ -1130,7 +1130,6 @@ static uint8_t movement_count_new_steps_lis2dw(void)
         _total_step_count += new_steps;
     }
     lis2dw_clear_fifo();
-    //printf("\r\n Count: %d  Total Steps: %lu\r\n", fifo.count, _total_step_count);
 #endif
     return new_steps;
 }

@@ -3,6 +3,8 @@
 #include "stdio.h"  //using this for printing debug outputs
 #include <stdlib.h>
 
+#define DEBUG_PRINT false
+
 //this algorithm is a simple adaptation of the following paper:
 //"RecoFit - Using a Wearable Sensor to Find, Recognize, and Count Repetitive Exercises"
 
@@ -18,6 +20,8 @@
 #define USE_WINDOW_AVG                  true   // If true, the step detection threshold will be adjusted based on a moving average of the signal magnitude
 #define AVG_WINDOW_SIZE_SHIFT           7  // The size of the moving average window. We are using bitshifting to keep the math efficient since we run once a second
 #define AVG_WINDOW_SIZE                 ((1 << AVG_WINDOW_SIZE_SHIFT) - 1)
+#define MAX_FIFO_SIZE_SIMPLE            13
+#define MAX_SIMPLE_STEPS                (MAX_FIFO_SIZE_SIMPLE / SIMPLE_SAMP_IGNORE_STEP)
 
 static int8_t deriv_coeffs[DERIV_FILT_LEN]        = {-6,31,0,-31,6};            //coefficients of derivative filter from https://www.dsprelated.com/showarticle/814.php
 static int8_t lpf_coeffs[LPF_FILT_LEN]            = {-5,6,34,68,84,68,34,6,-5}; //coefficients of FIR low pass filter generated in matlab using FDATOOL
@@ -259,8 +263,15 @@ uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
     uint8_t samples_processed = 0;
     uint32_t samples_sum = 0;
 #endif
+#if DEBUG_PRINT
+    printf("fifo counts: %d\r\n", fifo_data->count);
+#endif
     for (uint8_t i = 0; i < fifo_data->count; i++) {
+        if (i >= MAX_FIFO_SIZE_SIMPLE) break;
         uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
+#if DEBUG_PRINT
+        printf("%lu; ", magnitude);
+#endif
         if (magnitude >= step_counter_threshold) {
             new_steps += 1;
             i += SIMPLE_SAMP_IGNORE_STEP;
@@ -277,7 +288,12 @@ uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
         samples_sum *= SIMPLE_THRESHOLD_MULT;
         step_counter_threshold = ((step_counter_threshold * AVG_WINDOW_SIZE) + samples_sum) >> AVG_WINDOW_SIZE_SHIFT;
     }
+#if DEBUG_PRINT
+        printf("\r\nThreshold: %lu\r\n", step_counter_threshold);
+        printf("New Steps: %d\r\n; ", new_steps);
 #endif
+#endif
+    if (new_steps > MAX_SIMPLE_STEPS) new_steps = MAX_SIMPLE_STEPS;
     return new_steps;
 }
 
