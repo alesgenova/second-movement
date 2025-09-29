@@ -432,6 +432,7 @@ bool movement_enable_step_count(void);
 bool movement_disable_step_count(void);
 bool movement_step_count_is_enabled(void);
 void movement_reset_step_count(void);
+void movement_update_step_count_lis2dux(void);
 uint32_t movement_get_step_count(void);
 uint8_t movement_get_lis2dw_awake(void);
 

@@ -140,6 +140,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             logger_state->sec_inactivity = 0;
             logger_state->can_sleep = false;
             movement_schedule_background_task(distant_future);
+            movement_update_step_count_lis2dux();
             _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_LOW_ENERGY_UPDATE:

@@ -1143,13 +1143,21 @@ void movement_reset_step_count(void) {
     _total_step_count = 0;
 }
 
-uint32_t movement_get_step_count(void) {
+void movement_update_step_count_lis2dux(void) {
 #ifdef I2C_SERCOM
-    if (movement_state.has_lis2dux && movement_volatile_state.step_count_needs_updating) {
+    if (movement_state.has_lis2dux) {
         movement_volatile_state.step_count_needs_updating = false;
         uint16_t step_count;
         LIS2DUXS12Sensor_Get_Step_Count(&ctx, &step_count);
         _total_step_count = step_count;
+    }
+#endif
+}
+
+uint32_t movement_get_step_count(void) {
+#ifdef I2C_SERCOM
+    if (movement_volatile_state.step_count_needs_updating) {
+        movement_update_step_count_lis2dux();
     }
 #endif
     return _total_step_count;
@@ -1886,7 +1894,7 @@ void cb_accelerometer_lis2dux_event(void) {
     if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
 #endif
 
-    if (movement_state.counting_steps) movement_volatile_state.step_count_needs_updating = true;
+    if (movement_state.counting_steps && movement_state.has_lis2dux) movement_volatile_state.step_count_needs_updating = true;
 
     if (int_src.single_tap) {
         movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
