@@ -136,6 +136,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ACTIVATE:
             sensor_not_seen = !movement_step_count_is_enabled() && !movement_enable_step_count();
+            movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
             logger_state->can_sleep = false;
@@ -147,7 +148,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             if (!movement_has_lis2dux()) {
                 watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
                 if (movement_step_count_is_enabled()) {
-                    movement_disable_step_count();
+                    movement_disable_step_count(true);
                 }
                 break;
             }
@@ -183,8 +184,9 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 
 void step_counter_face_resign(void *context) {
     (void) context;
+    movement_set_step_count_keep_on(false);
     if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
-        movement_disable_step_count();
+        movement_disable_step_count(true);
     }
     movement_cancel_background_task();
 }

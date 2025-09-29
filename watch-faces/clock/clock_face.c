@@ -233,6 +233,7 @@ void clock_face_activate(void *context) {
 }
 
 static void enable_disable_step_count_times(watch_date_time_t date_time) {
+    if (movement_step_count_keep_on()) return;
     movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
     if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
         bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
@@ -241,7 +242,7 @@ static void enable_disable_step_count_times(watch_date_time_t date_time) {
                 movement_enable_step_count();
             }
         } else if (!in_count_step_hours) {
-            movement_disable_step_count();
+            movement_disable_step_count(false);
         }
     }
 }
@@ -253,7 +254,7 @@ bool clock_face_loop(movement_event_t event, void *context) {
 
     switch (event.event_type) {
         case EVENT_LOW_ENERGY_UPDATE:
-            if (movement_has_lis2dw() && movement_step_count_is_enabled()) movement_disable_step_count();
+            if (movement_has_lis2dw() && movement_step_count_is_enabled()) movement_disable_step_count(true);
             clock_start_tick_tock_animation();
             clock_display_low_energy(movement_get_local_date_time());
             break;
@@ -288,7 +289,7 @@ bool clock_face_loop(movement_event_t event, void *context) {
 void clock_face_resign(void *context) {
     (void) context;
     if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
-        movement_disable_step_count();
+        movement_disable_step_count(true);
     }
 }
 

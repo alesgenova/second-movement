@@ -314,8 +314,9 @@ typedef struct {
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
 
-    uint8_t when_to_count_steps : 7;
+    uint8_t when_to_count_steps : 6;
     uint8_t counting_steps      : 1;
+    uint8_t count_steps_keep_on : 1;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);
@@ -429,8 +430,10 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold);
 
 // if the board has an accelerometer, these functions will enable or disable step_counting
 bool movement_enable_step_count(void);
-bool movement_disable_step_count(void);
+bool movement_disable_step_count(bool ignore_keep_on);
 bool movement_step_count_is_enabled(void);
+bool movement_step_count_keep_on(void);
+void movement_set_step_count_keep_on(bool keep_on);
 void movement_reset_step_count(void);
 void movement_update_step_count_lis2dux(void);
 uint32_t movement_get_step_count(void);
