@@ -197,15 +197,15 @@ static void low_energy_setting_advance(void) {
 
 #ifdef I2C_SERCOM
 static void step_counter_setting_display(uint8_t subsecond) {
-    watch_display_text_with_fallback(WATCH_POSITION_TOP, "STEP", "ST");
-    movement_step_count_option_t step_count_setting = movement_get_count_steps();
-    if (step_count_setting == MOVEMENT_SC_NOT_INSTALLED) {
+    watch_display_text_with_fallback(WATCH_POSITION_TOP, "STEP", "SC");
+    movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
+    if (when_to_count_steps == MOVEMENT_SC_NOT_INSTALLED) {
         watch_display_text(WATCH_POSITION_BOTTOM, "NO SNS");
         return;
     }
     char buf[9];
     if (subsecond % 2) {
-        switch (step_count_setting) {
+        switch (when_to_count_steps) {
             case MOVEMENT_SC_OFF:
                 watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "OFF", "   OFF");
                 break;
@@ -223,10 +223,10 @@ static void step_counter_setting_display(uint8_t subsecond) {
 }
 
 static void step_counter_setting_advance(void) {
-    movement_step_count_option_t step_count_setting = movement_get_count_steps();
-    if (step_count_setting == MOVEMENT_SC_NOT_INSTALLED) return;
-    movement_step_count_option_t next_mode = (step_count_setting + 1) % MOVEMENT_SC_NOT_INSTALLED;
-    movement_set_count_steps(next_mode);
+    movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
+    if (when_to_count_steps == MOVEMENT_SC_NOT_INSTALLED) return;
+    movement_step_count_option_t next_mode = (when_to_count_steps + 1) % MOVEMENT_SC_NOT_INSTALLED;
+    movement_set_when_to_count_steps(next_mode);
 }
 #endif
 

@@ -233,8 +233,8 @@ void clock_face_activate(void *context) {
 }
 
 static void enable_disable_step_count_times(watch_date_time_t date_time) {
-    movement_step_count_option_t should_count_steps = movement_get_count_steps();
-    if (should_count_steps!= MOVEMENT_SC_OFF && should_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
+    movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
+    if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
         bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
         if (!movement_step_count_is_enabled()) {
             if (in_count_step_hours) {

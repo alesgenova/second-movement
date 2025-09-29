@@ -751,7 +751,7 @@ uint8_t get_step_count_end_hour(void) {
 }
 
 bool movement_in_step_counter_interval(uint8_t hour) {
-    switch (movement_get_count_steps())
+    switch (movement_get_when_to_count_steps())
     {
     case MOVEMENT_SC_ALWAYS:
         return true;
@@ -798,13 +798,13 @@ void movement_set_signal_volume(watch_buzzer_volume_t value) {
     movement_state.signal_volume = value;
 }
 
-movement_step_count_option_t movement_get_count_steps(void) {
-    if (!movement_state.has_lis2dw) return MOVEMENT_SC_NOT_INSTALLED;
-    return movement_state.count_steps;
+movement_step_count_option_t movement_get_when_to_count_steps(void) {
+    if (!movement_state.has_lis2dw && !movement_state.has_lis2dux) return MOVEMENT_SC_NOT_INSTALLED;
+    return movement_state.when_to_count_steps;
 }
 
-void movement_set_count_steps(movement_step_count_option_t value) {
-    movement_state.count_steps = value;
+void movement_set_when_to_count_steps(movement_step_count_option_t value) {
+    movement_state.when_to_count_steps = value;
 }
 
 watch_buzzer_volume_t movement_alarm_volume(void) {
@@ -1312,7 +1312,7 @@ void app_init(void) {
 
     movement_state.signal_volume = MOVEMENT_DEFAULT_SIGNAL_VOLUME;
     movement_state.alarm_volume = MOVEMENT_DEFAULT_ALARM_VOLUME;
-    movement_state.count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
+    movement_state.when_to_count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
