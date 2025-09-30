@@ -1214,12 +1214,14 @@ float movement_get_temperature(void) {
         temperature_c = thermistor_driver_get_temperature();
         thermistor_driver_disable();
     }
+#endif
 #ifdef I2C_SERCOM
     else if (movement_state.has_lis2dw) {
-            int16_t val = lis2dw_get_temperature();
-            val = val >> 4;
-            temperature_c = 25 + (float)val / 16.0;
-    } else if (movement_state.has_lis2dux) {
+        int16_t val = lis2dw_get_temperature();
+        val = val >> 4;
+        temperature_c = 25 + (float)val / 16.0;
+    }
+    else if (movement_state.has_lis2dux) {
         lis2duxs12_outt_data_t data;
         lis2duxs12_md_t md;
         lis2duxs12_outt_data_get(&ctx, &md, &data);
@@ -1504,7 +1506,7 @@ void app_setup(void) {
             HAL_GPIO_A4_in();
             // watch_register_extwake_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake, false);
 
-            watch_register_interrupt_callback(HAL_GPIO_A3_pin(), cb_accelerometer_lis2dux_event, INTERRUPT_TRIGGER_BOTH);
+            watch_register_interrupt_callback(HAL_GPIO_A3_pin(), cb_accelerometer_lis2dux_event, INTERRUPT_TRIGGER_RISING);
 
             // Enable the interrupts...
             lis2duxs12_int_config_t int_conf;
@@ -1930,6 +1932,7 @@ void cb_accelerometer_lis2dux_event(void) {
         lis2duxs12_all_sources_get(&ctx, &int_src);
 #if PRINT_LIS2DUX_EVENTS
         printf("cb_accelerometer_lis2dux_event\r\n");
+        if (int_src.tap)           printf("tap:           %d\r\n", int_src.tap);
         if (int_src.single_tap)    printf("single_tap:    %d\r\n", int_src.single_tap);
         if (int_src.double_tap)    printf("double_tap:    %d\r\n", int_src.double_tap);
         if (int_src.triple_tap)    printf("triple_tap:    %d\r\n", int_src.triple_tap);

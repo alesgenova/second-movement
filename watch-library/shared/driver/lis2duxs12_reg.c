@@ -609,6 +609,7 @@ int32_t lis2duxs12_all_sources_get(lis2duxs12_ctx_t *ctx, lis2duxs12_all_sources
     val->sleep_change = wu_src.sleep_change_ia;
     val->sleep_state  = wu_src.sleep_state;
 
+    val->tap        = tap_src.tap_ia;
     val->single_tap = tap_src.single_tap_ia;
     val->double_tap = tap_src.double_tap_ia;
     val->triple_tap = tap_src.triple_tap_ia;

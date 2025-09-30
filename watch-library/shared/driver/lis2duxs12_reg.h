@@ -2042,6 +2042,7 @@ typedef struct {
   uint8_t wake_up_z                    : 1;
   uint8_t wake_up_y                    : 1;
   uint8_t wake_up_x                    : 1;
+  uint8_t tap                          : 1;
   uint8_t single_tap                   : 1;
   uint8_t double_tap                   : 1;
   uint8_t triple_tap                   : 1;
