@@ -110,6 +110,13 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
     step_counter_state_t *logger_state = (step_counter_state_t *)context;
     bool displaying_curr_step_count = logger_state->display_index == logger_state->data_points;
     uint32_t step_count;
+    if (logger_state->just_woke && (  // There's a bug where a long press occurs on wake
+            event.event_type == EVENT_MODE_LONG_PRESS || event.event_type == EVENT_MODE_BUTTON_UP ||
+            event.event_type == EVENT_ALARM_LONG_PRESS || event.event_type == EVENT_ALARM_BUTTON_UP ||
+            event.event_type == EVENT_LIGHT_LONG_PRESS || event.event_type == EVENT_LIGHT_BUTTON_UP)) {
+        logger_state->just_woke = false;
+        return true;  // Ignore this press
+    }
     switch (event.event_type) {
         case EVENT_LIGHT_LONG_PRESS:
             // light button shows the timestamp, but if you need the light, long press it.
@@ -145,6 +152,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
+            logger_state->just_woke = true;
             if (!movement_has_lis2dux()) {
                 watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
                 if (movement_step_count_is_enabled()) {
@@ -183,7 +191,8 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 }
 
 void step_counter_face_resign(void *context) {
-    (void) context;
+    step_counter_state_t *logger_state = (step_counter_state_t *) context;
+    logger_state->just_woke = false;
     movement_set_step_count_keep_on(false);
     if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
         movement_disable_step_count(true);
