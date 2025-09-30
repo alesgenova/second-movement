@@ -258,11 +258,11 @@ bool clock_face_loop(movement_event_t event, void *context) {
             clock_start_tick_tock_animation();
             clock_display_low_energy(movement_get_local_date_time());
             break;
-        case EVENT_TICK:
         case EVENT_ACTIVATE:
+            enable_disable_step_count_times(movement_get_local_date_time());
+            // fall through
+        case EVENT_TICK:
             current = movement_get_local_date_time();
-
-            enable_disable_step_count_times(current);
 
             clock_display_clock(state, current);
 
