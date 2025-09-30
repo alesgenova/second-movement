@@ -314,9 +314,10 @@ typedef struct {
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
 
-    uint8_t when_to_count_steps : 6;
+    uint8_t when_to_count_steps : 5;
     uint8_t counting_steps      : 1;
     uint8_t count_steps_keep_on : 1;
+    uint8_t tap_enabled         : 1;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);

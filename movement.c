@@ -907,6 +907,7 @@ bool movement_enable_tap_detection_if_available(void) {
 
         // enable tap detection on INT1/A3.
         lis2dw_configure_int1(LIS2DW_CTRL4_INT1_SINGLE_TAP | LIS2DW_CTRL4_INT1_DOUBLE_TAP);
+        movement_state.tap_enabled = true;
 
         return true;
     }
@@ -939,6 +940,7 @@ bool movement_enable_tap_detection_if_available(void) {
         val.tap = PROPERTY_ENABLE;
         val.six_d = PROPERTY_ENABLE;
         lis2duxs12_pin_int1_route_set(&ctx, &val);
+        movement_state.tap_enabled = true;
 
         return true;
     }
@@ -957,6 +959,7 @@ bool movement_disable_tap_detection_if_available(void) {
         lis2dw_disable_double_tap();
         // ...disable Z axis (not sure if this is needed, does this save power?)...
         lis2dw_configure_tap_threshold(0, 0, 0, 0);
+        movement_state.tap_enabled = false;
 
         return true;
     }
@@ -973,6 +976,7 @@ bool movement_disable_tap_detection_if_available(void) {
         tap_cfg.double_tap_on = PROPERTY_DISABLE;
         lis2duxs12_tap_config_set(&ctx, tap_cfg);
         LIS2DUXS12Sensor_Disable_X(&ctx);
+        movement_state.tap_enabled = false;
 
         return true;
     }
@@ -1347,6 +1351,7 @@ void app_init(void) {
     movement_state.when_to_count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
     movement_state.counting_steps = false;
     movement_state.count_steps_keep_on = false;
+    movement_state.tap_enabled = false;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
@@ -1900,45 +1905,63 @@ void cb_tick(void) {
 }
 
 void cb_accelerometer_event(void) {
+<<<<<<< HEAD
     movement_volatile_state.has_pending_accelerometer = true;
+=======
+    if (!movement_state.tap_enabled) return;
+    uint8_t int_src = lis2dw_get_interrupt_source();
+
+    if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
+        movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
+        printf("Double tap!\n");
+    }
+    if (int_src & LIS2DW_REG_ALL_INT_SRC_SINGLE_TAP) {
+        movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
+        printf("Single tap!\n");
+    }
+>>>>>>> 86dd180d (We now don't read tap events if tapping isn't enabled)
 }
 
 #define PRINT_LIS2DUX_EVENTS false
 void cb_accelerometer_lis2dux_event(void) {
 #ifdef I2C_SERCOM
-    lis2duxs12_all_sources_t int_src;
-    lis2duxs12_all_sources_get(&ctx, &int_src);
+    if (movement_state.tap_enabled) {
+        lis2duxs12_all_sources_t int_src;
+        lis2duxs12_all_sources_get(&ctx, &int_src);
 #if PRINT_LIS2DUX_EVENTS
-    printf("cb_accelerometer_lis2dux_event\r\n");
-    if (int_src.single_tap)    printf("single_tap:    %d\r\n", int_src.single_tap);
-    if (int_src.double_tap)    printf("double_tap:    %d\r\n", int_src.double_tap);
-    if (int_src.triple_tap)    printf("triple_tap:    %d\r\n", int_src.triple_tap);
-    if (int_src.six_d)         printf("six_d:         %d\r\n", int_src.six_d);
-    if (int_src.six_d_xl)      printf("six_d_xl:      %d\r\n", int_src.six_d_xl);
-    if (int_src.six_d_xh)      printf("six_d_xh:      %d\r\n", int_src.six_d_xh);
-    if (int_src.six_d_yl)      printf("six_d_yl:      %d\r\n", int_src.six_d_yl);
-    if (int_src.six_d_yh)      printf("six_d_yh:      %d\r\n", int_src.six_d_yh);
-    if (int_src.six_d_zl)      printf("six_d_zl:      %d\r\n", int_src.six_d_zl);
-    if (int_src.six_d_zh)      printf("six_d_zh:      %d\r\n", int_src.six_d_zh);
-    if (int_src.sleep_change)  printf("sleep_change:  %d\r\n", int_src.sleep_change);
-    if (int_src.sleep_state)   printf("sleep_state:   %d\r\n", int_src.sleep_state);
-    if (int_src.tilt)          printf("tilt:          %d\r\n", int_src.tilt);
-    if (int_src.fifo_bdr)      printf("fifo_bdr:      %d\r\n", int_src.fifo_bdr);
-    if (int_src.fifo_full)     printf("fifo_full:     %d\r\n", int_src.fifo_full);
-    if (int_src.fifo_ovr)      printf("fifo_ovr:      %d\r\n", int_src.fifo_ovr);
-    if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
+        printf("cb_accelerometer_lis2dux_event\r\n");
+        if (int_src.single_tap)    printf("single_tap:    %d\r\n", int_src.single_tap);
+        if (int_src.double_tap)    printf("double_tap:    %d\r\n", int_src.double_tap);
+        if (int_src.triple_tap)    printf("triple_tap:    %d\r\n", int_src.triple_tap);
+        if (int_src.six_d)         printf("six_d:         %d\r\n", int_src.six_d);
+        if (int_src.six_d_xl)      printf("six_d_xl:      %d\r\n", int_src.six_d_xl);
+        if (int_src.six_d_xh)      printf("six_d_xh:      %d\r\n", int_src.six_d_xh);
+        if (int_src.six_d_yl)      printf("six_d_yl:      %d\r\n", int_src.six_d_yl);
+        if (int_src.six_d_yh)      printf("six_d_yh:      %d\r\n", int_src.six_d_yh);
+        if (int_src.six_d_zl)      printf("six_d_zl:      %d\r\n", int_src.six_d_zl);
+        if (int_src.six_d_zh)      printf("six_d_zh:      %d\r\n", int_src.six_d_zh);
+        if (int_src.sleep_change)  printf("sleep_change:  %d\r\n", int_src.sleep_change);
+        if (int_src.sleep_state)   printf("sleep_state:   %d\r\n", int_src.sleep_state);
+        if (int_src.tilt)          printf("tilt:          %d\r\n", int_src.tilt);
+        if (int_src.fifo_bdr)      printf("fifo_bdr:      %d\r\n", int_src.fifo_bdr);
+        if (int_src.fifo_full)     printf("fifo_full:     %d\r\n", int_src.fifo_full);
+        if (int_src.fifo_ovr)      printf("fifo_ovr:      %d\r\n", int_src.fifo_ovr);
+        if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
 #endif
 
-    if (movement_state.counting_steps && movement_state.has_lis2dux) movement_volatile_state.step_count_needs_updating = true;
+        if (int_src.single_tap) {
+            movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
+            printf("Single tap!\r\n");
+        }
 
-    if (int_src.single_tap) {
-        movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
-        printf("Single tap!\r\n");
+        if (int_src.double_tap) {
+            movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
+            printf("Double tap!\r\n");
+        }
     }
 
-    if (int_src.double_tap) {
-        movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
-        printf("Double tap!\r\n");
+    if (movement_state.counting_steps && movement_state.has_lis2dux) {
+        movement_volatile_state.step_count_needs_updating = true;
     }
 #endif
 }
