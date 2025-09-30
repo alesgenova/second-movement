@@ -116,6 +116,7 @@ static int32_t platform_write(void *handle, uint8_t reg, uint8_t *bufp, uint16_t
     (void)handle;
     for (uint16_t i = 0; i < len; i++) {
         watch_i2c_write8(LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
+//        printf("Write Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
     }
     return 0;
 }
@@ -124,7 +125,7 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t 
     (void)handle;
     for (uint16_t i = 0; i < len; i++) {
         bufp[i] = watch_i2c_read8(LIS2DUXS12_I2C_ADD_H >> 1, reg + i);
-//        printf("Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
+//        printf("Read  Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
     }
     return LIS2DUXS12_STATUS_OK;
 }
@@ -1060,6 +1061,7 @@ bool movement_enable_step_count(void) {
     else if (movement_state.has_lis2dux) {
         LIS2DUXS12Sensor_Enable_X(&ctx);
         LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN);
+        lis2duxs12_stpcnt_debounce_set(&ctx, 1);
         movement_state.counting_steps = true;
         return true;
     }
