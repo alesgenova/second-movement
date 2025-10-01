@@ -1062,13 +1062,20 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 bool movement_enable_step_count(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dw) {
+        lis2dw_low_power_mode_t mode = LIS2DW_LP_MODE_1;
+        lis2dw_range_t range = LIS2DW_RANGE_4_G;
+#ifdef COUNT_STEPS_USE_ESPRUINO
+        mode = LIS2DW_LP_MODE_2;
+        range = LIS2DW_RANGE_2_G;
+        count_steps_espruino_init();
+#endif
         // ramp data rate up to 400 Hz and high performance mode
         lis2dw_set_low_noise_mode(true);
         lis2dw_set_data_rate(LIS2DW_DATA_RATE_12_5_HZ);  // Change MAX_FIFO_SIZE_SIMPLE if you change this
         lis2dw_set_filter_type(LIS2DW_FILTER_LOW_PASS);
-        lis2dw_set_low_power_mode(LIS2DW_LP_MODE_1);
+        lis2dw_set_low_power_mode(mode);
         lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
-        lis2dw_set_range(LIS2DW_RANGE_4_G);
+        lis2dw_set_range(range);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
         movement_state.counting_steps = true;
         movement_set_accelerometer_motion_threshold(2); // 0.06Gs; Used to see if the watch is awake.
@@ -1160,7 +1167,11 @@ static uint8_t movement_count_new_steps_lis2dw(void)
         }
     } else {
         movement_step_fifo_misreads = 0;
+#ifdef COUNT_STEPS_USE_ESPRUINO
+        new_steps = count_steps_espruino(&fifo);
+#else
         new_steps = count_steps_simple(&fifo);
+#endif
         _total_step_count += new_steps;
     }
     lis2dw_clear_fifo();
