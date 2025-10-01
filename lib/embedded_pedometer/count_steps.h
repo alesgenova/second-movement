@@ -3,7 +3,7 @@
 #include "stdint.h"
 #include "lis2dw.h"
 
-#define COUNT_STEPS_USE_ESPRUINO   false
+#define COUNT_STEPS_USE_ESPRUINO   true
 
 uint32_t count_steps_approx_l2_norm(lis2dw_reading_t reading);
 uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data);
