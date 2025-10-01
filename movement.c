@@ -1475,15 +1475,19 @@ void app_setup(void) {
         }
 
         static bool lis2dux_checked = false;
-        printf("init lis2dux_checked: %d\r\n", lis2dux_checked);
+        if (movement_state.has_lis2dw) lis2dux_checked = true;  // We only have one port, they can't both be connected
         if (!lis2dux_checked) {
             watch_enable_i2c();
-            LIS2DUXS12Sensor_Begin(&ctx);
-            movement_state.has_lis2dux = true;
+            if (LIS2DUXS12Sensor_Begin(&ctx) == LIS2DUXS12_STATUS_OK) {
+                movement_state.has_lis2dux = true;
+            } else {
+                movement_state.has_lis2dux = false;
+                watch_disable_i2c();
+            }
             lis2dux_checked = true;
         } else if (movement_state.has_lis2dux) {
             watch_enable_i2c();
-            (LIS2DUXS12Sensor_Begin(&ctx));
+            LIS2DUXS12Sensor_Begin(&ctx);
         }
 
         if (movement_state.has_lis2dux) {
