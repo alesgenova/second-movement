@@ -239,7 +239,7 @@ static void enable_disable_step_count_times(watch_date_time_t date_time) {
         bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
         if (!movement_step_count_is_enabled()) {
             if (in_count_step_hours) {
-                movement_enable_step_count();
+                movement_enable_step_count_multiple_attempts(2);
             }
         } else if (!in_count_step_hours) {
             movement_disable_step_count(false);

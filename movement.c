@@ -1114,6 +1114,14 @@ bool movement_enable_step_count(void) {
     return false;
 }
 
+bool movement_enable_step_count_multiple_attempts(uint8_t max_tries) {
+    for (uint8_t i = 0; i < max_tries; i++)
+    {  // Truly a hack, but we'll try multiple times to enable the get the step counter working
+        if (movement_enable_step_count()) return true;
+    }
+    return false;
+}
+
 bool movement_disable_step_count(bool disable_immedietly) {
 #ifdef I2C_SERCOM
     if (!disable_immedietly && movement_state.count_steps_keep_on) {

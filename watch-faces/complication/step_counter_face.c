@@ -142,7 +142,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             break;
         case EVENT_ACTIVATE:
-            sensor_not_seen = !movement_step_count_is_enabled() && !movement_enable_step_count();
+            sensor_not_seen = !movement_step_count_is_enabled() && !movement_enable_step_count_multiple_attempts(2);
             movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
