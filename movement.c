@@ -64,6 +64,7 @@ void * watch_face_contexts[MOVEMENT_NUM_FACES];
 watch_date_time_t scheduled_tasks[MOVEMENT_NUM_FACES];
 const int32_t movement_le_inactivity_deadlines[8] = {INT_MAX, 600, 3600, 7200, 21600, 43200, 86400, 604800};
 const int16_t movement_timeout_inactivity_deadlines[4] = {60, 120, 300, 1800};
+const uint8_t movement_step_count_disable_delay_sec = 5;
 
 const uint32_t _movement_mode_button_events_mask = 0b111111 << EVENT_MODE_BUTTON_DOWN;
 const uint32_t _movement_light_button_events_mask = 0b111111 << EVENT_LIGHT_BUTTON_DOWN;
@@ -1096,10 +1097,15 @@ bool movement_enable_step_count(void) {
     return false;
 }
 
-bool movement_disable_step_count(bool ignore_keep_on) {
+bool movement_disable_step_count(bool disable_immedietly) {
 #ifdef I2C_SERCOM
-    if (!ignore_keep_on && movement_state.count_steps_keep_on) {
+    if (!disable_immedietly && movement_state.count_steps_keep_on) {
         return false;
+    }
+    if (!disable_immedietly) {
+        // Also reused to make sure we don't turn off step counting immedietly when we leave a screen
+        // It's silly to leave the screen, disable the count, and immedietly go to a face that also enables the count.
+        movement_state.step_count_disable_req_sec = movement_step_count_disable_delay_sec;
     }
     if (movement_state.has_lis2dw) {
         lis2dw_awake_state = 0;
@@ -1118,7 +1124,7 @@ bool movement_disable_step_count(bool ignore_keep_on) {
         return true;
     }
 #else
-    (void)ignore_keep_on;
+    (void)disable_immedietly;
 #endif
     return false;
 }
@@ -1365,6 +1371,7 @@ void app_init(void) {
     movement_state.counting_steps = false;
     movement_state.count_steps_keep_on = false;
     movement_state.tap_enabled = false;
+    movement_state.step_count_disable_req_sec = 0;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
@@ -1692,7 +1699,14 @@ bool app_loop(void) {
     if (movement_volatile_state.tick_fired_second)
     {
         movement_volatile_state.tick_fired_second = false;
-        if (movement_state.counting_steps) movement_count_new_steps_lis2dw();
+        if (movement_state.counting_steps) {
+            if (movement_state.step_count_disable_req_sec && --movement_state.step_count_disable_req_sec == 0) {
+                movement_disable_step_count(true);
+            }
+            else if (movement_state.has_lis2dw) {
+                movement_count_new_steps_lis2dw();
+            }
+        }
     }
 #endif
 
@@ -1918,7 +1932,7 @@ void cb_tick(void) {
     uint32_t subsecond_mask = freq - 1;
     movement_volatile_state.pending_events |= 1 << EVENT_TICK;
     movement_volatile_state.subsecond = ((counter + half_freq) & subsecond_mask) >> movement_state.tick_pern;
-    movement_volatile_state.tick_fired_second = movement_state.has_lis2dw && movement_volatile_state.subsecond == 0;
+    movement_volatile_state.tick_fired_second = movement_volatile_state.subsecond == 0;
 }
 
 void cb_accelerometer_event(void) {

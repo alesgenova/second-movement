@@ -195,7 +195,7 @@ void step_counter_face_resign(void *context) {
     logger_state->just_woke = false;
     movement_set_step_count_keep_on(false);
     if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
-        movement_disable_step_count(true);
+        movement_disable_step_count(false);
     }
     movement_cancel_background_task();
 }
