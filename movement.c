@@ -1066,28 +1066,47 @@ bool movement_enable_step_count(void) {
 #if COUNT_STEPS_USE_ESPRUINO
         count_steps_espruino_init();
 #endif
-        // ramp data rate up to 400 Hz and high performance mode
-        lis2dw_set_low_noise_mode(true);
-        lis2dw_set_data_rate(LIS2DW_DATA_RATE_12_5_HZ);  // Change MAX_FIFO_SIZE_SIMPLE if you change this
-        lis2dw_set_filter_type(LIS2DW_FILTER_LOW_PASS);
-        lis2dw_set_low_power_mode(LIS2DW_LP_MODE_1);
-        lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
-        lis2dw_set_range(LIS2DW_RANGE_4_G);
-        lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
-        movement_state.counting_steps = true;
         movement_state.step_count_disable_req_sec = 0;
-        movement_set_accelerometer_motion_threshold(2); // 0.06Gs; Used to see if the watch is awake.
+        // ramp data rate up to 400 Hz and high performance mode
+
+        bool low_noise = true;
+        lis2dw_data_rate_t data_rate = LIS2DW_DATA_RATE_12_5_HZ;
+        lis2dw_filter_t filter_type = LIS2DW_FILTER_LOW_PASS;
+        lis2dw_low_power_mode_t power_mode = LIS2DW_LP_MODE_1;
+        lis2dw_bandwidth_filtering_mode_t bandwidth_filtering = LIS2DW_BANDWIDTH_FILTER_DIV2;
+        lis2dw_range_t range = LIS2DW_RANGE_4_G;
+        lis2dw_mode_t mode = LIS2DW_MODE_LOW_POWER;
+        uint8_t threshold = 2;  // 0.06Gs; Used to see if the watch is awake.
+
+        lis2dw_set_low_noise_mode(low_noise);  // Inntesting, this didn't read back True after setting ever...so we're not checking it
+        lis2dw_set_data_rate(data_rate);  // Change MAX_FIFO_SIZE_SIMPLE if you change this
+        if (lis2dw_get_data_rate() != data_rate) return false;
+        lis2dw_set_filter_type(filter_type);
+        if (lis2dw_get_filter_type() != filter_type) return false;
+        lis2dw_set_low_power_mode(power_mode);
+        if (lis2dw_get_low_power_mode() != power_mode) return false;
+        lis2dw_set_bandwidth_filtering(bandwidth_filtering);
+        if (lis2dw_get_bandwidth_filtering() != bandwidth_filtering) return false;
+        lis2dw_set_range(range);
+        if (lis2dw_get_range() != range) return false;
+        lis2dw_set_mode(mode);
+        if (lis2dw_get_mode() != mode) return false;
+        lis2dw_set_mode(mode);
+        if (lis2dw_get_mode() != mode) return false;
+        movement_set_accelerometer_motion_threshold(threshold);
+        if (movement_get_accelerometer_motion_threshold() != threshold) return false;
         watch_register_interrupt_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake_event, INTERRUPT_TRIGGER_BOTH);
         lis2dw_enable_fifo();
         lis2dw_clear_fifo();
+        movement_state.counting_steps = true;
         return true;
     }
     else if (movement_state.has_lis2dux) {
+        movement_state.step_count_disable_req_sec = 0;
         LIS2DUXS12Sensor_Enable_X(&ctx);
         LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN);
         lis2duxs12_stpcnt_debounce_set(&ctx, 1);
         movement_state.counting_steps = true;
-        movement_state.step_count_disable_req_sec = 0;
         return true;
     }
 #endif
