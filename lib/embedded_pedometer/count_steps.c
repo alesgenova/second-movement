@@ -3,10 +3,10 @@
 #include "stdio.h"  //using this for printing debug outputs
 #include <stdlib.h>
 
-#define DEBUG_PRINT false
+#define DEBUG_PRINT true
 
-#define SIMPLE_THRESHOLD                15000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
-#define SIMPLE_THRESHOLD_MULT           1.5 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
+#define SIMPLE_THRESHOLD               2000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
+#define SIMPLE_THRESHOLD_MULT           1.3 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
 #define SIMPLE_SAMP_IGNORE_STEP         3   // After detecting a step, ignore this many samples to avoid double counting
 #define USE_WINDOW_AVG                  true   // If true, the step detection threshold will be adjusted based on a moving average of the signal magnitude
 #define AVG_WINDOW_SIZE_SHIFT           7  // The size of the moving average window. We are using bitshifting to keep the math efficient since we run once a second
@@ -49,14 +49,13 @@ uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
 #endif
     for (uint8_t i = 0; i < fifo_data->count; i++) {
         if (i >= MAX_FIFO_SIZE_SIMPLE) break;
-        uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
+        uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]) >> 3;
 #if DEBUG_PRINT
         printf("%lu; ", magnitude);
 #endif
         if (magnitude >= step_counter_threshold) {
             new_steps += 1;
             i += SIMPLE_SAMP_IGNORE_STEP;
-            continue;
         }
 #if USE_WINDOW_AVG
         samples_processed += 1;
@@ -290,8 +289,10 @@ uint8_t count_steps_espruino_sample(uint32_t accMag) {
   // scale to fit and clip
   //int v = (accMag-8192)>>5;
   int v = DCFilter(accMag)>>5;
-  //printf("v %d\n",v);
-  //if (v>127 || v<-128) printf("Out of range %d\n", v);
+#if DEBUG_PRINT
+  printf("v %d\r\n",v);
+  if (v>127 || v<-128) printf("Out of range %d\r\n", v);
+#endif
   if (v>127) v = 127;
   if (v<-128) v = -128;
 #ifdef STEPCOUNT_CONFIGURABLE
@@ -340,7 +341,7 @@ uint8_t count_steps_espruino(lis2dw_fifo_t *fifo_data) {
 
     for (uint8_t i = 0; i < fifo_data->count; i++) {
         uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
-        new_steps += count_steps_espruino_sample(magnitude);
+        new_steps += count_steps_espruino_sample(magnitude >> 3);
     }
 
     if (new_steps > MAX_SIMPLE_STEPS) new_steps = MAX_SIMPLE_STEPS;
