@@ -1075,6 +1075,7 @@ bool movement_enable_step_count(void) {
         lis2dw_set_range(LIS2DW_RANGE_2_G);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
         movement_state.counting_steps = true;
+        movement_state.step_count_disable_req_sec = 0;
         movement_set_accelerometer_motion_threshold(2); // 0.06Gs; Used to see if the watch is awake.
         watch_register_interrupt_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake_event, INTERRUPT_TRIGGER_BOTH);
         lis2dw_enable_fifo();
@@ -1086,6 +1087,7 @@ bool movement_enable_step_count(void) {
         LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN);
         lis2duxs12_stpcnt_debounce_set(&ctx, 1);
         movement_state.counting_steps = true;
+        movement_state.step_count_disable_req_sec = 0;
         return true;
     }
 #endif
