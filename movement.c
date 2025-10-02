@@ -1072,7 +1072,7 @@ bool movement_enable_step_count(void) {
         lis2dw_set_filter_type(LIS2DW_FILTER_LOW_PASS);
         lis2dw_set_low_power_mode(LIS2DW_LP_MODE_1);
         lis2dw_set_bandwidth_filtering(LIS2DW_BANDWIDTH_FILTER_DIV2);
-        lis2dw_set_range(LIS2DW_RANGE_2_G);
+        lis2dw_set_range(LIS2DW_RANGE_4_G);
         lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
         movement_state.counting_steps = true;
         movement_state.step_count_disable_req_sec = 0;
