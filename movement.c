@@ -917,10 +917,14 @@ bool movement_enable_tap_detection_if_available(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
+        // Enabling tapping turns off the step counter's behavior
+        // Don't make a watch face that counts steps and uses the tap at the same time.
+        // They can work together, but it's not coded that way here.
         lis2dux12_md_t md;
         lis2dux12_tap_config_t val;
         lis2dux12_pin_int_route_t int1_route;
         lis2dux12_int_config_t int_mode;
+        if (movement_state.counting_steps) movement_disable_step_count(true);
 
         lis2dux12_exit_deep_power_down(&dev_ctx);
         lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
@@ -986,7 +990,7 @@ bool movement_disable_tap_detection_if_available(void) {
         tap_cfg.double_tap_on = 0;
         lis2dux12_tap_config_set(&dev_ctx, tap_cfg);
         movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
-        // lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        lis2dux12_enter_deep_power_down(&dev_ctx, 1);
         movement_state.tap_enabled = false;
 
         return true;
@@ -1076,9 +1080,8 @@ bool movement_enable_step_count(void) {
 #if COUNT_STEPS_USE_ESPRUINO
         count_steps_espruino_init();
 #endif
-        movement_state.step_count_disable_req_sec = 0;
-        // ramp data rate up to 400 Hz and high performance mode
-
+        movement_state.step_count_disable_req_sec = -1;
+        if (movement_state.tap_enabled) movement_disable_tap_detection_if_available();
         bool low_noise = true;
         lis2dw_data_rate_t data_rate = LIS2DW_DATA_RATE_12_5_HZ;
         lis2dw_filter_t filter_type = LIS2DW_FILTER_LOW_PASS;
@@ -1116,13 +1119,13 @@ bool movement_enable_step_count(void) {
         lis2dux12_emb_pin_int_route_t int1_route;
         lis2dux12_int_config_t int_mode;
         lis2dux12_md_t md;
-        movement_state.step_count_disable_req_sec = 0;
+        movement_state.step_count_disable_req_sec = -1;
         lis2dux12_exit_deep_power_down(&dev_ctx);
         /* Set bdu and if_inc recommended for driver usage */
         lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_EMB_FUNC_ON);
         delay_ms(10);
         lis2dux12_embedded_int_cfg_set(&dev_ctx, LIS2DUX12_EMBEDDED_INT_LATCHED);
-        lis2dux12_stpcnt_debounce_set(&dev_ctx, 4);
+        lis2dux12_stpcnt_debounce_set(&dev_ctx, 2);
         stpcnt_mode.step_counter_enable = PROPERTY_ENABLE;
         stpcnt_mode.false_step_rej = PROPERTY_DISABLE;
         lis2dux12_stpcnt_mode_set(&dev_ctx, stpcnt_mode);
@@ -1161,6 +1164,7 @@ bool movement_disable_step_count(bool disable_immedietly) {
         // Also reused to make sure we don't turn off step counting immedietly when we leave a screen
         // It's silly to leave the screen, disable the count, and immedietly go to a face that also enables the count.
         movement_state.step_count_disable_req_sec = movement_step_count_disable_delay_sec;
+        return false;
     }
     if (movement_state.has_lis2dw) {
         lis2dw_awake_state = 0;
@@ -1188,7 +1192,7 @@ bool movement_disable_step_count(bool disable_immedietly) {
         emb_pin_int.tilt = PROPERTY_DISABLE;
         lis2dux12_emb_pin_int2_route_set(&dev_ctx, &emb_pin_int);
         movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
-        // lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        lis2dux12_enter_deep_power_down(&dev_ctx, 1);
         return true;
     }
 #else
@@ -1438,7 +1442,7 @@ void app_init(void) {
     movement_state.counting_steps = false;
     movement_state.count_steps_keep_on = false;
     movement_state.tap_enabled = false;
-    movement_state.step_count_disable_req_sec = 0;
+    movement_state.step_count_disable_req_sec = -1;
     movement_state.light_on = false;
     movement_state.next_available_backup_register = 2;
     _movement_reset_inactivity_countdown();
@@ -1770,7 +1774,7 @@ bool app_loop(void) {
     {
         movement_volatile_state.tick_fired_second = false;
         if (movement_state.counting_steps) {
-            if (movement_state.step_count_disable_req_sec && --movement_state.step_count_disable_req_sec == 0) {
+            if (movement_state.step_count_disable_req_sec > 0 && --movement_state.step_count_disable_req_sec == 0) {
                 movement_disable_step_count(true);
             }
             else if (movement_state.has_lis2dw) {

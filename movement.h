@@ -318,7 +318,7 @@ typedef struct {
     uint8_t counting_steps      : 1;
     uint8_t count_steps_keep_on : 1;
     uint8_t tap_enabled         : 1;
-    uint8_t step_count_disable_req_sec;
+    int8_t step_count_disable_req_sec;
 } movement_state_t;
 
 void movement_move_to_face(uint8_t watch_face_index);
