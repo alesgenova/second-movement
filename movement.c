@@ -46,7 +46,7 @@
 #include "delay.h"
 #include "thermistor_driver.h"
 #include "count_steps.h"
-#include "lis2duxs12_reg.h"  // from ST's driver
+#include "lis2dux12_reg.h"  // from ST's driver
 
 #include "movement_config.h"
 
@@ -114,11 +114,11 @@ typedef struct {
 movement_volatile_state_t movement_volatile_state;
 
 #ifdef I2C_SERCOM
-static int32_t platform_write(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
+static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len) {
     (void)handle;
     for (uint16_t i = 0; i < len; i++) {
-        watch_i2c_write8(LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
-//        printf("Write Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
+        watch_i2c_write8(LIS2DUX12_I2C_ADD_H >> 1, reg + i, bufp[i]);
+//        printf("Write Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUX12_I2C_ADD_H >> 1, reg + i, bufp[i]);
     }
     return 0;
 }
@@ -126,16 +126,20 @@ static int32_t platform_write(void *handle, uint8_t reg, uint8_t *bufp, uint16_t
 static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
     (void)handle;
     for (uint16_t i = 0; i < len; i++) {
-        bufp[i] = watch_i2c_read8(LIS2DUXS12_I2C_ADD_H >> 1, reg + i);
-//        printf("Read  Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUXS12_I2C_ADD_H >> 1, reg + i, bufp[i]);
+        bufp[i] = watch_i2c_read8(LIS2DUX12_I2C_ADD_H >> 1, reg + i);
+//        printf("Read  Add: %X Reg 0x%02X: 0x%02X\r\n", LIS2DUX12_I2C_ADD_H >> 1, reg + i, bufp[i]);
     }
-    return LIS2DUXS12_STATUS_OK;
+    return 0;
 }
 
-static lis2duxs12_ctx_t ctx = {
+static void platform_delay(uint32_t millisec) {
+    delay_ms(millisec);
+}
+
+static stmdev_ctx_t dev_ctx = {
     .read_reg  = platform_read,
     .write_reg = platform_write,
-    .handle    = NULL
+    .mdelay = platform_delay,
 };
 #endif
 
@@ -913,34 +917,45 @@ bool movement_enable_tap_detection_if_available(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
-        LIS2DUXS12Sensor_Enable_X(&ctx);
-        LIS2DUXS12Sensor_Set_X_ODR_With_Mode(&ctx, 400, LIS2DUXS12_HIGH_PERFORMANCE);
-        LIS2DUXS12Sensor_Set_X_FS(&ctx, 2);
+        lis2dux12_md_t md;
+        lis2dux12_tap_config_t val;
+        lis2dux12_pin_int_route_t int1_route;
+        lis2dux12_int_config_t int_mode;
 
-        lis2duxs12_tap_config_t tap_cfg;
-        lis2duxs12_tap_config_get(&ctx, &tap_cfg);
+        lis2dux12_exit_deep_power_down(&dev_ctx);
+        lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
+        /* Set bdu and if_inc recommended for driver usage */
+        lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_ONLY_ON);
 
-        // Parameters in Enable_Double_Tap_Detection in https://github.com/stm32duino/LIS2DUXS12
-        tap_cfg.axis = LIS2DUXS12_TAP_ON_Z;
-        tap_cfg.inverted_peak_time = 4;
-        tap_cfg.pre_still_ths = 2;
-        tap_cfg.post_still_time = 8;
-        tap_cfg.shock_wait_time = 6;
-        tap_cfg.post_still_ths = 8;
-        tap_cfg.latency = 4;
-        tap_cfg.wait_end_latency = 1;
-        tap_cfg.peak_ths = 8;
-        tap_cfg.single_tap_on = PROPERTY_ENABLE;
-        tap_cfg.double_tap_on = PROPERTY_ENABLE;
-        tap_cfg.pre_still_n = 10;
+        val.axis = LIS2DUX12_TAP_ON_Z;
+        val.pre_still_ths = 4;
+        val.post_still_ths = 5;
+        val.post_still_time = 3;
+        val.peak_ths = 3;
+        val.pre_still_start = 0;
+        val.pre_still_n = 5;
+        val.inverted_peak_time = 4;
+        val.shock_wait_time = 3;
+        val.rebound = 0;
+        val.latency = 4;
+        val.single_tap_on = PROPERTY_ENABLE;
+        val.double_tap_on = PROPERTY_ENABLE;
+        val.wait_end_latency = 1;
+        lis2dux12_tap_config_set(&dev_ctx, val);
 
-        lis2duxs12_tap_config_set(&ctx, tap_cfg);
+        /* Configure interrupt pins */
+        lis2dux12_pin_int1_route_get(&dev_ctx, &int1_route);
+        int1_route.tap   = PROPERTY_ENABLE;
+        int1_route.six_d = PROPERTY_ENABLE;
+        lis2dux12_pin_int1_route_set(&dev_ctx, &int1_route);
+        int_mode.int_cfg = LIS2DUX12_INT_LEVEL;
+        lis2dux12_int_config_set(&dev_ctx, &int_mode);
 
-        lis2duxs12_pin_int_route_t val;
-        lis2duxs12_pin_int1_route_get(&ctx, &val);
-        val.tap = PROPERTY_ENABLE;
-        val.six_d = PROPERTY_ENABLE;
-        lis2duxs12_pin_int1_route_set(&ctx, &val);
+        /* Set Output Data Rate */
+        movement_state.accelerometer_background_rate = LIS2DUX12_400Hz_LP;
+        md.fs =  LIS2DUX12_8g;
+        md.odr = movement_state.accelerometer_background_rate;
+        lis2dux12_mode_set(&dev_ctx, &md);
         movement_state.tap_enabled = true;
 
         return true;
@@ -965,18 +980,13 @@ bool movement_disable_tap_detection_if_available(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
-        lis2duxs12_md_t md = {
-            .odr = movement_state.accelerometer_background_rate,
-            .fs = LIS2DUXS12_2g,
-            .bw = LIS2DUXS12_ODR_div_2
-        };
-        lis2duxs12_mode_set(&ctx, &md);
-        lis2duxs12_tap_config_t tap_cfg;
-        lis2duxs12_tap_config_get(&ctx, &tap_cfg);
-        tap_cfg.single_tap_on = PROPERTY_DISABLE;
-        tap_cfg.double_tap_on = PROPERTY_DISABLE;
-        lis2duxs12_tap_config_set(&ctx, tap_cfg);
-        LIS2DUXS12Sensor_Disable_X(&ctx);
+        lis2dux12_tap_config_t tap_cfg;
+        lis2dux12_tap_config_get(&dev_ctx, &tap_cfg);
+        tap_cfg.single_tap_on = 0;
+        tap_cfg.double_tap_on = 0;
+        lis2dux12_tap_config_set(&dev_ctx, tap_cfg);
+        movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
+        // lis2dux12_enter_deep_power_down(&dev_ctx, 1);
         movement_state.tap_enabled = false;
 
         return true;
@@ -1011,10 +1021,10 @@ bool movement_set_accelerometer_background_rate(uint8_t new_rate) {
     }
     else if (movement_state.has_lis2dux) {
         if (movement_state.accelerometer_background_rate != new_rate) {
-            lis2duxs12_md_t md;
-            lis2duxs12_mode_get(&ctx, &md);
+            lis2dux12_md_t md;
+            lis2dux12_mode_get(&dev_ctx, &md);
             md.odr = new_rate;
-            lis2duxs12_mode_set(&ctx, &md);
+            lis2dux12_mode_set(&dev_ctx, &md);
             movement_state.accelerometer_background_rate = new_rate;
 
             return true;
@@ -1044,10 +1054,10 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
     }
     else if (movement_state.has_lis2dux) {
         if (movement_state.accelerometer_background_rate != new_threshold) {
-            lis2duxs12_wakeup_config_t val;
-            lis2duxs12_wakeup_config_get(&ctx, &val);
+            lis2dux12_wakeup_config_t val;
+            lis2dux12_wakeup_config_get(&dev_ctx, &val);
             val.wake_ths = new_threshold;
-            lis2duxs12_wakeup_config_set(&ctx, val);
+            lis2dux12_wakeup_config_set(&dev_ctx, val);
             movement_state.accelerometer_background_rate = new_threshold;
 
             return true;
@@ -1102,10 +1112,30 @@ bool movement_enable_step_count(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
+        lis2dux12_stpcnt_mode_t stpcnt_mode;
+        lis2dux12_emb_pin_int_route_t int1_route;
+        lis2dux12_int_config_t int_mode;
+        lis2dux12_md_t md;
         movement_state.step_count_disable_req_sec = 0;
-        LIS2DUXS12Sensor_Enable_X(&ctx);
-        LIS2DUXS12Sensor_Enable_Pedometer(&ctx, LIS2DUXS12_INT1_PIN);
-        lis2duxs12_stpcnt_debounce_set(&ctx, 1);
+        lis2dux12_exit_deep_power_down(&dev_ctx);
+        /* Set bdu and if_inc recommended for driver usage */
+        lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_EMB_FUNC_ON);
+        delay_ms(10);
+        lis2dux12_embedded_int_cfg_set(&dev_ctx, LIS2DUX12_EMBEDDED_INT_LATCHED);
+        lis2dux12_stpcnt_debounce_set(&dev_ctx, 4);
+        stpcnt_mode.step_counter_enable = PROPERTY_ENABLE;
+        stpcnt_mode.false_step_rej = PROPERTY_DISABLE;
+        lis2dux12_stpcnt_mode_set(&dev_ctx, stpcnt_mode);
+        /* Configure interrupt pins */
+        int1_route.step_det   = PROPERTY_ENABLE;
+        lis2dux12_emb_pin_int1_route_set(&dev_ctx, &int1_route);
+        int_mode.int_cfg = LIS2DUX12_INT_LEVEL;
+        lis2dux12_int_config_set(&dev_ctx, &int_mode);
+        /* Set Output Data Rate */
+        md.fs =  LIS2DUX12_4g;
+        md.bw = LIS2DUX12_ODR_div_4;
+        md.odr = LIS2DUX12_25Hz_LP;
+        lis2dux12_mode_set(&dev_ctx, &md);
         movement_state.counting_steps = true;
         return true;
     }
@@ -1144,8 +1174,21 @@ bool movement_disable_step_count(bool disable_immedietly) {
     }
     else if (movement_state.has_lis2dux) {
         movement_state.counting_steps = false;
-        LIS2DUXS12Sensor_Disable_Pedometer(&ctx);
-        LIS2DUXS12Sensor_Disable_X(&ctx);
+        lis2dux12_emb_pin_int_route_t emb_pin_int;
+        lis2dux12_stpcnt_mode_t mode = {
+            .step_counter_enable = PROPERTY_DISABLE,
+            .false_step_rej = PROPERTY_DISABLE,
+            .step_counter_in_fifo = PROPERTY_DISABLE
+        };
+        lis2dux12_stpcnt_mode_set(&dev_ctx, mode);
+        lis2dux12_emb_pin_int1_route_get(&dev_ctx, &emb_pin_int);
+        emb_pin_int.tilt = PROPERTY_DISABLE;
+        lis2dux12_emb_pin_int1_route_set(&dev_ctx, &emb_pin_int);
+        lis2dux12_emb_pin_int2_route_get(&dev_ctx, &emb_pin_int);
+        emb_pin_int.tilt = PROPERTY_DISABLE;
+        lis2dux12_emb_pin_int2_route_set(&dev_ctx, &emb_pin_int);
+        movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
+        // lis2dux12_enter_deep_power_down(&dev_ctx, 1);
         return true;
     }
 #else
@@ -1213,7 +1256,7 @@ static uint8_t movement_count_new_steps_lis2dw(void)
 void movement_reset_step_count(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dux) {
-        LIS2DUXS12Sensor_Step_Counter_Reset(&ctx);
+        lis2dux12_stpcnt_rst_step_set(&dev_ctx);
     }
 #endif
     _total_step_count = 0;
@@ -1223,8 +1266,8 @@ void movement_update_step_count_lis2dux(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dux) {
         movement_volatile_state.step_count_needs_updating = false;
-        uint16_t step_count;
-        LIS2DUXS12Sensor_Get_Step_Count(&ctx, &step_count);
+        uint16_t step_count = 0;
+        lis2dux12_stpcnt_steps_get(&dev_ctx, &step_count);
         _total_step_count = step_count;
     }
 #endif
@@ -1264,9 +1307,8 @@ float movement_get_temperature(void) {
         temperature_c = 25 + (float)val / 16.0;
     }
     else if (movement_state.has_lis2dux) {
-        lis2duxs12_outt_data_t data;
-        lis2duxs12_md_t md;
-        lis2duxs12_outt_data_get(&ctx, &md, &data);
+        lis2dux12_outt_data_t data;
+        lis2dux12_outt_data_get(&dev_ctx, &data);
         temperature_c = data.heat.deg_c;
     }
 #endif
@@ -1509,8 +1551,11 @@ void app_setup(void) {
         static bool lis2dux_checked = false;
         if (movement_state.has_lis2dw) lis2dux_checked = true;  // We only have one port, they can't both be connected
         if (!lis2dux_checked) {
+            uint8_t id;
             watch_enable_i2c();
-            if (LIS2DUXS12Sensor_Begin(&ctx) == LIS2DUXS12_STATUS_OK) {
+            lis2dux12_device_id_get(&dev_ctx, &id);
+            if (id == LIS2DUX12_ID) {
+                lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
                 movement_state.has_lis2dux = true;
             } else {
                 movement_state.has_lis2dux = false;
@@ -1519,47 +1564,47 @@ void app_setup(void) {
             lis2dux_checked = true;
         } else if (movement_state.has_lis2dux) {
             watch_enable_i2c();
-            LIS2DUXS12Sensor_Begin(&ctx);
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
         }
-
+        movement_state.accelerometer_background_rate = LIS2DUX12_OFF;
         if (movement_state.has_lis2dux) {
-            lis2duxs12_md_t md = {
+            lis2dux12_md_t md = {
                 .odr = movement_state.accelerometer_background_rate,
-                .fs  = LIS2DUXS12_2g,
-                .bw  = LIS2DUXS12_ODR_div_2
+                .fs  = LIS2DUX12_4g,
+                .bw  = LIS2DUX12_ODR_div_2
             };
-            lis2duxs12_mode_set(&ctx, &md);
+            lis2dux12_mode_set(&dev_ctx, &md);
 
-            lis2duxs12_wakeup_config_t wakeup = {
-                .wake_dur = LIS2DUXS12_0_ODR,
+            lis2dux12_wakeup_config_t wakeup = {
+                .wake_dur = LIS2DUX12_0_ODR,
                 .sleep_dur = 0,
                 .wake_ths = movement_state.accelerometer_motion_threshold,
                 .wake_ths_weight = 0,
-                .wake_enable = LIS2DUXS12_SLEEP_ON,
-                .inact_odr = LIS2DUXS12_ODR_1_6_HZ
+                .wake_enable = LIS2DUX12_SLEEP_ON,
+                .inact_odr = LIS2DUX12_ODR_1_6_HZ
             };
-            lis2duxs12_wakeup_config_set(&ctx, wakeup);
+            lis2dux12_wakeup_config_set(&dev_ctx, wakeup);
 
-            lis2duxs12_sixd_config_t sixd = {
-                .threshold = LIS2DUXS12_DEG_50,
-                .mode = LIS2DUXS12_6D
+            lis2dux12_sixd_config_t sixd = {
+                .threshold = LIS2DUX12_DEG_50,
+                .mode = LIS2DUX12_6D
             };
-            lis2duxs12_sixd_config_set(&ctx, sixd);
+            lis2dux12_sixd_config_set(&dev_ctx, sixd);
 
-            lis2duxs12_pin_int_route_t val;
-            lis2duxs12_pin_int2_route_get(&ctx, &val);
+            lis2dux12_pin_int_route_t val;
+            lis2dux12_pin_int2_route_get(&dev_ctx, &val);
             val.sleep_change = PROPERTY_ENABLE;
-            lis2duxs12_pin_int2_route_set(&ctx, &val);
+            lis2dux12_pin_int2_route_set(&dev_ctx, &val);
             HAL_GPIO_A4_in();
             // watch_register_extwake_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake, false);
 
             watch_register_interrupt_callback(HAL_GPIO_A3_pin(), cb_accelerometer_lis2dux_event, INTERRUPT_TRIGGER_RISING);
 
             // Enable the interrupts...
-            lis2duxs12_int_config_t int_conf;
-            lis2duxs12_int_config_get(&ctx, &int_conf);
-            int_conf.int_cfg = LIS2DUXS12_INT_LEVEL;
-            lis2duxs12_int_config_set(&ctx, &int_conf);
+            lis2dux12_int_config_t int_conf;
+            lis2dux12_int_config_get(&dev_ctx, &int_conf);
+            int_conf.int_cfg = LIS2DUX12_INT_LEVEL;
+            lis2dux12_int_config_set(&dev_ctx, &int_conf);
         }
 #endif
 
@@ -1982,28 +2027,28 @@ void cb_accelerometer_event(void) {
 void cb_accelerometer_lis2dux_event(void) {
 #ifdef I2C_SERCOM
     if (movement_state.tap_enabled) {
-        lis2duxs12_all_sources_t int_src;
-        lis2duxs12_all_sources_get(&ctx, &int_src);
+        lis2dux12_all_sources_t int_src;
+        lis2dux12_all_sources_get(&dev_ctx, &int_src);
 #if PRINT_LIS2DUX_EVENTS
         printf("cb_accelerometer_lis2dux_event\r\n");
-        if (int_src.tap)           printf("tap:           %d\r\n", int_src.tap);
-        if (int_src.single_tap)    printf("single_tap:    %d\r\n", int_src.single_tap);
-        if (int_src.double_tap)    printf("double_tap:    %d\r\n", int_src.double_tap);
-        if (int_src.triple_tap)    printf("triple_tap:    %d\r\n", int_src.triple_tap);
-        if (int_src.six_d)         printf("six_d:         %d\r\n", int_src.six_d);
-        if (int_src.six_d_xl)      printf("six_d_xl:      %d\r\n", int_src.six_d_xl);
-        if (int_src.six_d_xh)      printf("six_d_xh:      %d\r\n", int_src.six_d_xh);
-        if (int_src.six_d_yl)      printf("six_d_yl:      %d\r\n", int_src.six_d_yl);
-        if (int_src.six_d_yh)      printf("six_d_yh:      %d\r\n", int_src.six_d_yh);
-        if (int_src.six_d_zl)      printf("six_d_zl:      %d\r\n", int_src.six_d_zl);
-        if (int_src.six_d_zh)      printf("six_d_zh:      %d\r\n", int_src.six_d_zh);
-        if (int_src.sleep_change)  printf("sleep_change:  %d\r\n", int_src.sleep_change);
-        if (int_src.sleep_state)   printf("sleep_state:   %d\r\n", int_src.sleep_state);
-        if (int_src.tilt)          printf("tilt:          %d\r\n", int_src.tilt);
-        if (int_src.fifo_bdr)      printf("fifo_bdr:      %d\r\n", int_src.fifo_bdr);
-        if (int_src.fifo_full)     printf("fifo_full:     %d\r\n", int_src.fifo_full);
-        if (int_src.fifo_ovr)      printf("fifo_ovr:      %d\r\n", int_src.fifo_ovr);
-        if (int_src.fifo_th)       printf("fifo_th:       %d\r\n", int_src.fifo_th);
+        if (int_src.drdy)             printf("drdy:             %d\r\n", int_src.drdy);
+        if (int_src.free_fall)       printf("free_fall:        %d\r\n", int_src.free_fall);
+        if (int_src.wake_up)         printf("wake_up:          %d\r\n", int_src.wake_up);
+        if (int_src.wake_up_x)       printf("wake_up_x:        %d\r\n", int_src.wake_up_x);
+        if (int_src.wake_up_y)       printf("wake_up_y:        %d\r\n", int_src.wake_up_y);
+        if (int_src.wake_up_z)       printf("wake_up_z:        %d\r\n", int_src.wake_up_z);
+        if (int_src.single_tap)      printf("single_tap:       %d\r\n", int_src.single_tap);
+        if (int_src.double_tap)      printf("double_tap:       %d\r\n", int_src.double_tap);
+        if (int_src.triple_tap)      printf("triple_tap:       %d\r\n", int_src.triple_tap);
+        if (int_src.six_d)           printf("six_d:            %d\r\n", int_src.six_d);
+        if (int_src.six_d_xl)        printf("six_d_xl:         %d\r\n", int_src.six_d_xl);
+        if (int_src.six_d_xh)        printf("six_d_xh:         %d\r\n", int_src.six_d_xh);
+        if (int_src.six_d_yl)        printf("six_d_yl:         %d\r\n", int_src.six_d_yl);
+        if (int_src.six_d_yh)        printf("six_d_yh:         %d\r\n", int_src.six_d_yh);
+        if (int_src.six_d_zl)        printf("six_d_zl:         %d\r\n", int_src.six_d_zl);
+        if (int_src.six_d_zh)        printf("six_d_zh:         %d\r\n", int_src.six_d_zh);
+        if (int_src.sleep_change)    printf("sleep_change:     %d\r\n", int_src.sleep_change);
+        if (int_src.sleep_state)     printf("sleep_state:      %d\r\n", int_src.sleep_state);
 #endif
 
         if (int_src.single_tap) {
@@ -2018,7 +2063,11 @@ void cb_accelerometer_lis2dux_event(void) {
     }
 
     if (movement_state.counting_steps && movement_state.has_lis2dux) {
-        movement_volatile_state.step_count_needs_updating = true;
+        lis2dux12_embedded_status_t emb_status;
+        lis2dux12_embedded_status_get(&dev_ctx, &emb_status);
+        if (emb_status.is_step_det) {
+            movement_volatile_state.step_count_needs_updating = true;
+        }
     }
 #endif
 }
