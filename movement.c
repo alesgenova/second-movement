@@ -1085,7 +1085,7 @@ bool movement_enable_step_count(void) {
         bool low_noise = true;
         lis2dw_data_rate_t data_rate = LIS2DW_DATA_RATE_12_5_HZ;
         lis2dw_filter_t filter_type = LIS2DW_FILTER_LOW_PASS;
-        lis2dw_low_power_mode_t power_mode = LIS2DW_LP_MODE_1;
+        lis2dw_low_power_mode_t power_mode = LIS2DW_LP_MODE_2;
         lis2dw_bandwidth_filtering_mode_t bandwidth_filtering = LIS2DW_BANDWIDTH_FILTER_DIV2;
         lis2dw_range_t range = LIS2DW_RANGE_4_G;
         lis2dw_mode_t mode = LIS2DW_MODE_LOW_POWER;

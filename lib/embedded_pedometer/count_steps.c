@@ -5,7 +5,7 @@
 
 #define DEBUG_PRINT true
 
-#define SIMPLE_THRESHOLD               2000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
+#define SIMPLE_THRESHOLD               4000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
 #define SIMPLE_THRESHOLD_MULT           1.3 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
 #define SIMPLE_SAMP_IGNORE_STEP         3   // After detecting a step, ignore this many samples to avoid double counting
 #define USE_WINDOW_AVG                  true   // If true, the step detection threshold will be adjusted based on a moving average of the signal magnitude
@@ -49,7 +49,7 @@ uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
 #endif
     for (uint8_t i = 0; i < fifo_data->count; i++) {
         if (i >= MAX_FIFO_SIZE_SIMPLE) break;
-        uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]) >> 3;
+        uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]) >> 2;
 #if DEBUG_PRINT
         printf("%lu; ", magnitude);
 #endif
@@ -338,14 +338,13 @@ uint8_t count_steps_espruino_sample(uint32_t accMag) {
 
 uint8_t count_steps_espruino(lis2dw_fifo_t *fifo_data) {
     uint8_t new_steps = 0;
-    // Fifo data is 12 bit @ 4G, or 1.952mg/LSB. The 3 LSB are also zero and need to be bitshifted.
-    // So 1g * (1LSB / 1.952) = 512. 512 << 3 = 4096
-    // This code wants 8192 LSB=1g, we just need to bitshift left once to get them to match
-    // This can be done by shifting the output of count_steps_approx_l2_norm left once
+    // Fifo data is 12 bit @ 4G, or 1.952mg/LSB. The 2 LSB are also zero and need to be bitshifted.
+    // So 1g * (1LSB / 0.488) = 2049. 512 << 2 = 8192
+    // This code wants 8192 LSB=1g, we're good!
 
     for (uint8_t i = 0; i < fifo_data->count; i++) {
         uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
-        new_steps += count_steps_espruino_sample(magnitude << 1);
+        new_steps += count_steps_espruino_sample(magnitude);
     }
 
     if (new_steps > MAX_SIMPLE_STEPS) new_steps = MAX_SIMPLE_STEPS;
