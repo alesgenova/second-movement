@@ -244,6 +244,8 @@ static void enable_disable_step_count_times(watch_date_time_t date_time) {
         } else if (!in_count_step_hours) {
             movement_disable_step_count(false);
         }
+    } else if (movement_step_count_is_enabled()) {
+        movement_disable_step_count(false);
     }
 }
 

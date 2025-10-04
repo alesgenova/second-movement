@@ -917,19 +917,16 @@ bool movement_enable_tap_detection_if_available(void) {
         return true;
     }
     else if (movement_state.has_lis2dux) {
-        // Enabling tapping turns off the step counter's behavior
-        // Don't make a watch face that counts steps and uses the tap at the same time.
-        // They can work together, but it's not coded that way here.
         lis2dux12_md_t md;
         lis2dux12_tap_config_t val;
         lis2dux12_pin_int_route_t int1_route;
         lis2dux12_int_config_t int_mode;
-        if (movement_state.counting_steps) movement_disable_step_count(true);
-
-        lis2dux12_exit_deep_power_down(&dev_ctx);
-        lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
-        /* Set bdu and if_inc recommended for driver usage */
-        lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_ONLY_ON);
+        if (!movement_state.counting_steps) {
+            lis2dux12_exit_deep_power_down(&dev_ctx);
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
+            /* Set bdu and if_inc recommended for driver usage */
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_ONLY_ON);
+        }
 
         val.axis = LIS2DUX12_TAP_ON_Z;
         val.pre_still_ths = 4;
@@ -956,9 +953,8 @@ bool movement_enable_tap_detection_if_available(void) {
         lis2dux12_int_config_set(&dev_ctx, &int_mode);
 
         /* Set Output Data Rate */
-        movement_state.accelerometer_background_rate = LIS2DUX12_400Hz_LP;
         md.fs =  LIS2DUX12_8g;
-        md.odr = movement_state.accelerometer_background_rate;
+        md.odr = LIS2DUX12_400Hz_LP;
         lis2dux12_mode_set(&dev_ctx, &md);
         movement_state.tap_enabled = true;
 
@@ -989,8 +985,19 @@ bool movement_disable_tap_detection_if_available(void) {
         tap_cfg.single_tap_on = 0;
         tap_cfg.double_tap_on = 0;
         lis2dux12_tap_config_set(&dev_ctx, tap_cfg);
-        movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
-        lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        lis2dux12_md_t md;
+        if (movement_state.counting_steps) {
+            md.fs =  LIS2DUX12_4g;
+            md.bw = LIS2DUX12_ODR_div_4;
+            md.odr = LIS2DUX12_25Hz_LP;
+            lis2dux12_mode_set(&dev_ctx, &md);
+        } else {
+            lis2dux12_mode_get(&dev_ctx, &md);
+            md.odr = movement_state.accelerometer_background_rate;
+            lis2dux12_mode_set(&dev_ctx, &md);
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
+            lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        }
         movement_state.tap_enabled = false;
 
         return true;
@@ -1082,7 +1089,6 @@ bool movement_enable_step_count(void) {
 #if COUNT_STEPS_USE_ESPRUINO
         count_steps_espruino_init();
 #endif
-        if (movement_state.tap_enabled) movement_disable_tap_detection_if_available();
         bool low_noise = true;
         lis2dw_data_rate_t data_rate = LIS2DW_DATA_RATE_12_5_HZ;
         lis2dw_filter_t filter_type = LIS2DW_FILTER_LOW_PASS;
@@ -1093,7 +1099,7 @@ bool movement_enable_step_count(void) {
         uint8_t threshold = 2;  // 0.06Gs; Used to see if the watch is awake.
 
         lis2dw_set_low_noise_mode(low_noise);  // Inntesting, this didn't read back True after setting ever...so we're not checking it
-        lis2dw_set_data_rate(data_rate);  // Change MAX_FIFO_SIZE_SIMPLE if you change this
+        movement_set_accelerometer_background_rate(data_rate);
         if (lis2dw_get_data_rate() != data_rate) return false;
         lis2dw_set_filter_type(filter_type);
         if (lis2dw_get_filter_type() != filter_type) return false;
@@ -1103,8 +1109,6 @@ bool movement_enable_step_count(void) {
         if (lis2dw_get_bandwidth_filtering() != bandwidth_filtering) return false;
         lis2dw_set_range(range);
         if (lis2dw_get_range() != range) return false;
-        lis2dw_set_mode(mode);
-        if (lis2dw_get_mode() != mode) return false;
         lis2dw_set_mode(mode);
         if (lis2dw_get_mode() != mode) return false;
         movement_set_accelerometer_motion_threshold(threshold);
@@ -1134,11 +1138,14 @@ bool movement_enable_step_count(void) {
         lis2dux12_emb_pin_int1_route_set(&dev_ctx, &int1_route);
         int_mode.int_cfg = LIS2DUX12_INT_LEVEL;
         lis2dux12_int_config_set(&dev_ctx, &int_mode);
-        /* Set Output Data Rate */
-        md.fs =  LIS2DUX12_4g;
-        md.bw = LIS2DUX12_ODR_div_4;
-        md.odr = LIS2DUX12_25Hz_LP;
-        lis2dux12_mode_set(&dev_ctx, &md);
+        if (!movement_state.tap_enabled) {
+            /* Set Output Data Rate */
+            md.fs =  LIS2DUX12_4g;
+            md.bw = LIS2DUX12_ODR_div_4;
+            md.odr = LIS2DUX12_25Hz_LP;
+            lis2dux12_mode_set(&dev_ctx, &md);
+            movement_state.accelerometer_background_rate = md.odr;
+        }
         movement_state.counting_steps = true;
         return true;
     }
@@ -1171,9 +1178,11 @@ bool movement_disable_step_count(bool disable_immedietly) {
         movement_step_fifo_misreads = 0;
         movement_state.counting_steps = false;
         movement_set_accelerometer_motion_threshold(32); // 1G
-        watch_unregister_interrupt_callback(HAL_GPIO_A4_pin());
         lis2dw_clear_fifo();
         lis2dw_disable_fifo();
+        if (movement_state.tap_enabled) return true;
+        watch_unregister_interrupt_callback(HAL_GPIO_A4_pin());
+        movement_state.accelerometer_background_rate = LIS2DW_DATA_RATE_POWERDOWN;
         return movement_disable_tap_detection_if_available();
     }
     else if (movement_state.has_lis2dux) {
@@ -1191,8 +1200,11 @@ bool movement_disable_step_count(bool disable_immedietly) {
         lis2dux12_emb_pin_int2_route_get(&dev_ctx, &emb_pin_int);
         emb_pin_int.tilt = PROPERTY_DISABLE;
         lis2dux12_emb_pin_int2_route_set(&dev_ctx, &emb_pin_int);
-        movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
-        lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        if (!movement_state.tap_enabled) {
+            movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
+            lis2dux12_enter_deep_power_down(&dev_ctx, 1);
+        }
         return true;
     }
 #else
@@ -1568,47 +1580,18 @@ void app_setup(void) {
             lis2dux_checked = true;
         } else if (movement_state.has_lis2dux) {
             watch_enable_i2c();
-            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
         }
-        movement_state.accelerometer_background_rate = LIS2DUX12_OFF;
         if (movement_state.has_lis2dux) {
-            lis2dux12_md_t md = {
-                .odr = movement_state.accelerometer_background_rate,
-                .fs  = LIS2DUX12_4g,
-                .bw  = LIS2DUX12_ODR_div_2
-            };
-            lis2dux12_mode_set(&dev_ctx, &md);
-
-            lis2dux12_wakeup_config_t wakeup = {
-                .wake_dur = LIS2DUX12_0_ODR,
-                .sleep_dur = 0,
-                .wake_ths = movement_state.accelerometer_motion_threshold,
-                .wake_ths_weight = 0,
-                .wake_enable = LIS2DUX12_SLEEP_ON,
-                .inact_odr = LIS2DUX12_ODR_1_6_HZ
-            };
-            lis2dux12_wakeup_config_set(&dev_ctx, wakeup);
-
+            lis2dux12_exit_deep_power_down(&dev_ctx);
+            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
+            movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
             lis2dux12_sixd_config_t sixd = {
                 .threshold = LIS2DUX12_DEG_50,
                 .mode = LIS2DUX12_6D
             };
             lis2dux12_sixd_config_set(&dev_ctx, sixd);
-
-            lis2dux12_pin_int_route_t val;
-            lis2dux12_pin_int2_route_get(&dev_ctx, &val);
-            val.sleep_change = PROPERTY_ENABLE;
-            lis2dux12_pin_int2_route_set(&dev_ctx, &val);
             HAL_GPIO_A4_in();
-            // watch_register_extwake_callback(HAL_GPIO_A4_pin(), cb_accelerometer_wake, false);
-
             watch_register_interrupt_callback(HAL_GPIO_A3_pin(), cb_accelerometer_lis2dux_event, INTERRUPT_TRIGGER_RISING);
-
-            // Enable the interrupts...
-            lis2dux12_int_config_t int_conf;
-            lis2dux12_int_config_get(&dev_ctx, &int_conf);
-            int_conf.int_cfg = LIS2DUX12_INT_LEVEL;
-            lis2dux12_int_config_set(&dev_ctx, &int_conf);
         }
 #endif
 
@@ -2018,11 +2001,11 @@ void cb_accelerometer_event(void) {
 
     if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
         movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
-        printf("Double tap!\n");
+        printf("Double tap!\r\n");
     }
     if (int_src & LIS2DW_REG_ALL_INT_SRC_SINGLE_TAP) {
         movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
-        printf("Single tap!\n");
+        printf("Single tap!\r\n");
     }
 >>>>>>> 86dd180d (We now don't read tap events if tapping isn't enabled)
 }
