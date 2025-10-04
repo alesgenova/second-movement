@@ -1076,11 +1076,12 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 
 bool movement_enable_step_count(void) {
 #ifdef I2C_SERCOM
+    movement_state.step_count_disable_req_sec = -1;
+    if (movement_state.counting_steps) return true;
     if (movement_state.has_lis2dw) {
 #if COUNT_STEPS_USE_ESPRUINO
         count_steps_espruino_init();
 #endif
-        movement_state.step_count_disable_req_sec = -1;
         if (movement_state.tap_enabled) movement_disable_tap_detection_if_available();
         bool low_noise = true;
         lis2dw_data_rate_t data_rate = LIS2DW_DATA_RATE_12_5_HZ;
@@ -1119,7 +1120,6 @@ bool movement_enable_step_count(void) {
         lis2dux12_emb_pin_int_route_t int1_route;
         lis2dux12_int_config_t int_mode;
         lis2dux12_md_t md;
-        movement_state.step_count_disable_req_sec = -1;
         lis2dux12_exit_deep_power_down(&dev_ctx);
         /* Set bdu and if_inc recommended for driver usage */
         lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_EMB_FUNC_ON);
@@ -1775,7 +1775,7 @@ bool app_loop(void) {
         movement_volatile_state.tick_fired_second = false;
         if (movement_state.counting_steps) {
             if (movement_state.step_count_disable_req_sec > 0 && --movement_state.step_count_disable_req_sec == 0) {
-                movement_disable_step_count(true);
+                if (!movement_state.count_steps_keep_on) movement_disable_step_count(true);
             }
             else if (movement_state.has_lis2dw) {
                 movement_count_new_steps_lis2dw();
