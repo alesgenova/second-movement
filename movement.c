@@ -144,8 +144,8 @@ static stmdev_ctx_t dev_ctx = {
 #endif
 
 static uint32_t _total_step_count = 0;
-static uint8_t lis2dw_awake_state = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
-static uint32_t _total_step_count_prev_lis2dux = 0;  // When the LIS2DUX wakes, its step count resets. This value adds onto it if we get a lower step count
+static uint8_t _awake_state_lis2dw = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
+static uint16_t _step_count_prev_lis2dux = 0;  // When the LIS2DUX wakes, its step count resets. This value adds onto it if we get a lower step count
 #ifdef I2C_SERCOM
 static const uint8_t movement_max_step_fifo_misreads = 3;
 static uint8_t movement_step_fifo_misreads = 0;
@@ -1175,7 +1175,7 @@ bool movement_disable_step_count(bool disable_immedietly) {
         return false;
     }
     if (movement_state.has_lis2dw) {
-        lis2dw_awake_state = 0;
+        _awake_state_lis2dw = 0;
         movement_step_fifo_misreads = 0;
         movement_state.counting_steps = false;
         movement_set_accelerometer_motion_threshold(32); // 1G
@@ -1230,7 +1230,7 @@ void movement_set_step_count_keep_on(bool keep_on) {
 static uint8_t movement_count_new_steps_lis2dw(void)
 {
     uint8_t new_steps = 0;
-    if (lis2dw_awake_state == 0) {
+    if (_awake_state_lis2dw == 0) {
         return new_steps;
     }
     if (movement_volatile_state.light_button.is_down ||
@@ -1239,8 +1239,8 @@ static uint8_t movement_count_new_steps_lis2dw(void)
         // Don't count steps while a button is held down.
         return new_steps;
     }
-    if (lis2dw_awake_state == 1) {
-        lis2dw_awake_state = 2;
+    if (_awake_state_lis2dw == 1) {
+        _awake_state_lis2dw = 2;
         lis2dw_clear_fifo();  // likely stale data at this point.
         return new_steps;
     }
@@ -1274,7 +1274,7 @@ void movement_reset_step_count(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dux) {
         lis2dux12_stpcnt_rst_step_set(&dev_ctx);
-        _total_step_count_prev_lis2dux = 0;
+        _step_count_prev_lis2dux = 0;
     }
 #endif
     _total_step_count = 0;
@@ -1286,13 +1286,13 @@ void movement_update_step_count_lis2dux(void) {
         movement_volatile_state.step_count_needs_updating = false;
         uint16_t step_count = 0;
         lis2dux12_stpcnt_steps_get(&dev_ctx, &step_count);
-        if (step_count >= _total_step_count_prev_lis2dux) {
+        if (step_count >= _step_count_prev_lis2dux) {
             // Normal increase
-            _total_step_count += (step_count - _total_step_count_prev_lis2dux);
+            _total_step_count += (step_count - _step_count_prev_lis2dux);
         } else {
             _total_step_count += step_count;
         }
-        _total_step_count_prev_lis2dux = _total_step_count;
+        _step_count_prev_lis2dux = step_count;
     }
 #endif
 }
@@ -1307,7 +1307,7 @@ uint32_t movement_get_step_count(void) {
 }
 
 uint8_t movement_get_lis2dw_awake(void) {
-    return lis2dw_awake_state;
+    return _awake_state_lis2dw;
 }
 
 float movement_get_temperature(void) {
@@ -2085,7 +2085,7 @@ void cb_accelerometer_lis2dux_event(void) {
 }
 
 void cb_accelerometer_wake_event(void) {
-    lis2dw_awake_state = !HAL_GPIO_A4_read();
+    _awake_state_lis2dw = !HAL_GPIO_A4_read();
 }
 
 void cb_accelerometer_wake(void) {
