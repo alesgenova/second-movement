@@ -145,14 +145,8 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
-            if (!movement_has_lis2dux()) {
-                watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
-                break;
-            }
-            if(displaying_curr_step_count && watch_get_lcd_type() == WATCH_LCD_TYPE_CLASSIC) {
-                watch_display_text(WATCH_POSITION_TOP_RIGHT, "SL");
-            }
-            // fall through
+            watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
+            break;
         case EVENT_TICK:
             if(displaying_curr_step_count) {
                 step_count = get_step_count();
