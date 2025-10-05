@@ -431,8 +431,8 @@ uint8_t movement_get_accelerometer_motion_threshold(void);
 bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold);
 
 // if the board has an accelerometer, these functions will enable or disable step_counting
-bool movement_enable_step_count(void);
-bool movement_enable_step_count_multiple_attempts(uint8_t max_tries);
+bool movement_enable_step_count(bool force_enable);
+bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_enable);
 bool movement_disable_step_count(bool disable_immedietly);
 bool movement_step_count_is_enabled(void);
 bool movement_step_count_keep_on(void);

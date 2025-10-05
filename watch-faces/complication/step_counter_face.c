@@ -135,7 +135,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             break;
         case EVENT_ACTIVATE:
-            sensor_not_seen = !movement_enable_step_count_multiple_attempts(2);
+            sensor_not_seen = !movement_enable_step_count_multiple_attempts(2, false);
             movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
@@ -147,9 +147,6 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
         case EVENT_LOW_ENERGY_UPDATE:
             if (!movement_has_lis2dux()) {
                 watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
-                if (movement_step_count_is_enabled()) {
-                    movement_disable_step_count(true);
-                }
                 break;
             }
             // fall through

@@ -1081,10 +1081,10 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
     return false;
 }
 
-bool movement_enable_step_count(void) {
+bool movement_enable_step_count(bool force_enable) {
 #ifdef I2C_SERCOM
     movement_state.step_count_disable_req_sec = -1;
-    if (movement_state.counting_steps) return true;
+    if (!force_enable && movement_state.counting_steps) return true;
     if (movement_state.has_lis2dw) {
 #if COUNT_STEPS_USE_ESPRUINO
         count_steps_espruino_init();
@@ -1154,10 +1154,10 @@ bool movement_enable_step_count(void) {
     return false;
 }
 
-bool movement_enable_step_count_multiple_attempts(uint8_t max_tries) {
+bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_enable) {
     for (uint8_t i = 0; i < max_tries; i++)
     {  // Truly a hack, but we'll try multiple times to enable the get the step counter working
-        if (movement_enable_step_count()) return true;
+        if (movement_enable_step_count(force_enable)) return true;
     }
     return false;
 }
@@ -1571,7 +1571,6 @@ void app_setup(void) {
             watch_enable_i2c();
             lis2dux12_device_id_get(&dev_ctx, &id);
             if (id == LIS2DUX12_ID) {
-                lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
                 movement_state.has_lis2dux = true;
             } else {
                 movement_state.has_lis2dux = false;
@@ -1603,6 +1602,14 @@ void app_setup(void) {
 
         watch_faces[movement_state.current_face_idx].activate(watch_face_contexts[movement_state.current_face_idx]);
         movement_volatile_state.pending_events |=  1 << EVENT_ACTIVATE;
+
+        if (movement_state.counting_steps) {
+            movement_enable_step_count_multiple_attempts(2, true);
+        }
+
+        if (movement_state.tap_enabled) {
+            movement_enable_tap_detection_if_available();
+        }
     }
 }
 
@@ -1795,6 +1802,16 @@ bool app_loop(void) {
         _movement_disable_inactivity_countdown();
 
         watch_register_extwake_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_extwake, true);
+
+        if (movement_state.counting_steps) {
+            movement_disable_step_count(true);
+            movement_state.counting_steps = true; // This is to come back and reset it on wake
+        }
+
+        if (movement_state.tap_enabled) {
+            movement_disable_tap_detection_if_available();
+            movement_state.tap_enabled = true;
+        }
 
         // _sleep_mode_app_loop takes over at this point and loops until exit_sleep_mode is set by the extwake handler,
         // or wake is requested using the movement_request_wake function.
