@@ -145,6 +145,7 @@ static stmdev_ctx_t dev_ctx = {
 
 static uint32_t _total_step_count = 0;
 static uint8_t lis2dw_awake_state = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
+static uint32_t _total_step_count_prev_lis2dux = 0;  // When the LIS2DUX wakes, its step count resets. This value adds onto it if we get a lower step count
 #ifdef I2C_SERCOM
 static const uint8_t movement_max_step_fifo_misreads = 3;
 static uint8_t movement_step_fifo_misreads = 0;
@@ -1273,6 +1274,7 @@ void movement_reset_step_count(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dux) {
         lis2dux12_stpcnt_rst_step_set(&dev_ctx);
+        _total_step_count_prev_lis2dux = 0;
     }
 #endif
     _total_step_count = 0;
@@ -1284,7 +1286,13 @@ void movement_update_step_count_lis2dux(void) {
         movement_volatile_state.step_count_needs_updating = false;
         uint16_t step_count = 0;
         lis2dux12_stpcnt_steps_get(&dev_ctx, &step_count);
-        _total_step_count = step_count;
+        if (step_count >= _total_step_count_prev_lis2dux) {
+            // Normal increase
+            _total_step_count += (step_count - _total_step_count_prev_lis2dux);
+        } else {
+            _total_step_count += step_count;
+        }
+        _total_step_count_prev_lis2dux = _total_step_count;
     }
 #endif
 }
