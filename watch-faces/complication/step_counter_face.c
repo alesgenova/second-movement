@@ -35,7 +35,6 @@ static const watch_date_time_t distant_future = {
     .unit = {0, 0, 0, 1, 1, 63}
 };
 
-static bool sensor_not_seen;
 static const uint16_t sec_inactivity_allow_sleep = STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN * 60;
 
 static uint32_t get_step_count(void) {
@@ -44,10 +43,10 @@ static uint32_t get_step_count(void) {
     return step_count;
 }
 
-static uint16_t display_step_count_now(void) {
+static uint16_t display_step_count_now(bool sensor_seen) {
     char buf[10];
     uint32_t step_count = get_step_count();
-    if (sensor_not_seen) {
+    if (!sensor_seen) {
         watch_display_text(WATCH_POSITION_BOTTOM, "NO SNS");
     } else {
         sprintf(buf, "%6lu", step_count);
@@ -67,7 +66,7 @@ static void _step_counter_face_log_data(step_counter_state_t *logger_state) {
 
 static void _step_counter_face_logging_update_display(step_counter_state_t *logger_state) {
     if (logger_state->display_index == logger_state->data_points) {
-        logger_state->step_count_prev = display_step_count_now();
+        logger_state->step_count_prev = display_step_count_now(logger_state->sensor_seen);
         watch_display_text(WATCH_POSITION_TOP_RIGHT, "  "); // To clear the date on the classic display
         watch_display_text_with_fallback(WATCH_POSITION_TOP, "STEP ", "SC");
         return;
@@ -129,14 +128,14 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
         case EVENT_ALARM_LONG_PRESS:
             if (displaying_curr_step_count) {
                 movement_reset_step_count();
-                logger_state->step_count_prev = display_step_count_now();
+                logger_state->step_count_prev = display_step_count_now(logger_state->sensor_seen);
             } else {
                 logger_state->display_index = logger_state->data_points;
                 _step_counter_face_logging_update_display(logger_state);
             }
             break;
         case EVENT_ACTIVATE:
-            sensor_not_seen = !movement_enable_step_count_multiple_attempts(2, false);
+            logger_state->sensor_seen = movement_still_sees_accelerometer() && movement_enable_step_count_multiple_attempts(2, false);
             movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
@@ -156,7 +155,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 if (step_count != logger_state->step_count_prev) {
                     allow_sleeping(false, logger_state);
                     logger_state->sec_inactivity = 0;
-                    logger_state->step_count_prev = display_step_count_now();
+                    logger_state->step_count_prev = display_step_count_now(logger_state->sensor_seen);
                 } else {
                     if (logger_state->sec_inactivity >= sec_inactivity_allow_sleep) {
                         allow_sleeping(true, logger_state);

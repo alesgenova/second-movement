@@ -1016,6 +1016,19 @@ bool movement_has_lis2dux(void) {
     return movement_state.has_lis2dux;
 }
 
+bool movement_still_sees_accelerometer(void) {
+#ifdef I2C_SERCOM
+    if (movement_state.has_lis2dw) {
+        return lis2dw_get_device_id() == LIS2DW_WHO_AM_I_VAL;
+    } else if (movement_state.has_lis2dux) {
+        uint8_t id;
+        lis2dux12_device_id_get(&dev_ctx, &id);
+        return id == LIS2DUX12_ID;
+    }
+#endif
+    return false;
+}
+
 uint8_t movement_get_accelerometer_background_rate(void) {
     if (movement_state.has_lis2dw || movement_state.has_lis2dux) return movement_state.accelerometer_background_rate;
     else return LIS2DW_DATA_RATE_POWERDOWN;
