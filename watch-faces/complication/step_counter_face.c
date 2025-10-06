@@ -27,6 +27,7 @@
 #include "step_counter_face.h"
 
 #define STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN 5
+#define STEP_COUNTER_SECONDS_FORCE_RECHECK 30
 #define STEP_COUNTER_MAX_STEPS_DISPLAY 999999
 
 // distant future for background task: January 1, 2083
@@ -159,6 +160,10 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                         allow_sleeping(true, logger_state);
                     } else {
                         logger_state->sec_inactivity++;
+                        // If, for whatever reason, we're not receiving the signal from the chip to u[pdate the count, we'll manually get the updated value
+                        if ((logger_state->sec_inactivity % STEP_COUNTER_SECONDS_FORCE_RECHECK) == 0) {
+                            movement_update_step_count_lis2dux();
+                        }
                     }
                 }
             } else {
