@@ -146,7 +146,9 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
-            watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
+            if(displaying_curr_step_count) {
+                watch_display_text(WATCH_POSITION_BOTTOM, "SLEEP ");
+            }
             break;
         case EVENT_TICK:
             if(displaying_curr_step_count) {
