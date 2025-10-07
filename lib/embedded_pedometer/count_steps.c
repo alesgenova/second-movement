@@ -3,7 +3,7 @@
 #include "stdio.h"  //using this for printing debug outputs
 #include <stdlib.h>
 
-#define DEBUG_PRINT true
+#define DEBUG_PRINT false
 
 #define SIMPLE_THRESHOLD               2000  // Magnitudes at or above this threshold are considered a step, but can change if USE_WINDOW_AVG is true
 #define SIMPLE_THRESHOLD_MULT           1.3 // Multiplier for the moving average threshold adjustment. It was seen in some testing that 50% higher than the average worked well.
