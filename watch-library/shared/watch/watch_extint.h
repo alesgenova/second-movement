@@ -67,12 +67,4 @@ void watch_disable_external_interrupts(void);
   */
 void watch_register_interrupt_callback(const uint8_t pin, watch_cb_t callback, eic_interrupt_trigger_t trigger);
 
-/** @brief Unconfigures an external interrupt callback on one of the external interrupt pins.
-  * @param pin One of BTN_LIGHT, BTN_MODE, BTN_ALARM, A0, A1, A2, A3 or A4. If the pin parameter matches one of
-  *            the three button pins, this function will also enable an internal pull-down resistor. If
-  *            the pin parameter is A0-A4, you are responsible for setting any required pull configuration
-  *            using watch_enable_pull_up or watch_enable_pull_down.
-  */
-void watch_unregister_interrupt_callback(const uint8_t pin);
-
 /// @}

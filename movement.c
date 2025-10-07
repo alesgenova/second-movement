@@ -1194,7 +1194,6 @@ bool movement_disable_step_count(bool disable_immedietly) {
         lis2dw_clear_fifo();
         lis2dw_disable_fifo();
         if (movement_state.tap_enabled) return true;
-        watch_unregister_interrupt_callback(HAL_GPIO_A4_pin());
         movement_state.accelerometer_background_rate = LIS2DW_DATA_RATE_POWERDOWN;
         return movement_disable_tap_detection_if_available();
     }

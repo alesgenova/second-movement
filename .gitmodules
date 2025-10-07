@@ -6,8 +6,7 @@
 	url = https://github.com/littlefs-project/littlefs.git
 [submodule "gossamer"]
 	path = gossamer
-	url = https://github.com/voloved/gossamer.git
-	branch = devolov
+	url = https://github.com/joeycastillo/gossamer.git
 [submodule "utz"]
 	path = utz
 	url = https://github.com/joeycastillo/utz.git
