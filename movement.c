@@ -924,7 +924,6 @@ bool movement_enable_tap_detection_if_available(void) {
         lis2dux12_int_config_t int_mode;
         if (!movement_state.counting_steps) {
             lis2dux12_exit_deep_power_down(&dev_ctx);
-            lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
             /* Set bdu and if_inc recommended for driver usage */
             lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_ONLY_ON);
         }
@@ -1142,7 +1141,7 @@ bool movement_enable_step_count(bool force_enable) {
         /* Set bdu and if_inc recommended for driver usage */
         lis2dux12_init_set(&dev_ctx, LIS2DUX12_SENSOR_EMB_FUNC_ON);
         delay_ms(10);
-        lis2dux12_embedded_int_cfg_set(&dev_ctx, LIS2DUX12_EMBEDDED_INT_LATCHED);
+        lis2dux12_embedded_int_cfg_set(&dev_ctx, LIS2DUX12_EMBEDDED_INT_LEVEL);
         lis2dux12_stpcnt_debounce_set(&dev_ctx, 2);
         stpcnt_mode.step_counter_enable = PROPERTY_ENABLE;
         stpcnt_mode.false_step_rej = PROPERTY_DISABLE;
