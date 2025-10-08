@@ -1097,6 +1097,7 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 bool movement_enable_step_count(bool force_enable) {
 #ifdef I2C_SERCOM
     movement_state.step_count_disable_req_sec = -1;
+    if (movement_state.count_steps_keep_off) return false;
     if (!force_enable && movement_state.counting_steps) return true;
     if (movement_state.has_lis2dw) {
 #if COUNT_STEPS_USE_ESPRUINO
@@ -1233,8 +1234,16 @@ bool movement_step_count_keep_on(void) {
     return movement_state.count_steps_keep_on;
 }
 
+bool movement_step_count_keep_off(void) {
+    return movement_state.count_steps_keep_off;
+}
+
 void movement_set_step_count_keep_on(bool keep_on) {
     movement_state.count_steps_keep_on = keep_on;
+}
+
+void movement_set_step_count_keep_off(bool keep_off) {
+    movement_state.count_steps_keep_off = keep_off;
 }
 
 #ifdef I2C_SERCOM
@@ -1472,6 +1481,7 @@ void app_init(void) {
     movement_state.when_to_count_steps = MOVEMENT_DEFAULT_COUNT_STEPS;
     movement_state.counting_steps = false;
     movement_state.count_steps_keep_on = false;
+    movement_state.count_steps_keep_off = false;
     movement_state.tap_enabled = false;
     movement_state.step_count_disable_req_sec = -1;
     movement_state.light_on = false;

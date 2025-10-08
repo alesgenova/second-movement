@@ -314,9 +314,10 @@ typedef struct {
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
 
-    uint8_t when_to_count_steps : 5;
+    uint8_t when_to_count_steps : 4;
     uint8_t counting_steps      : 1;
     uint8_t count_steps_keep_on : 1;
+    uint8_t count_steps_keep_off: 1;
     uint8_t tap_enabled         : 1;
     int8_t step_count_disable_req_sec;
 } movement_state_t;
@@ -437,7 +438,9 @@ bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_
 bool movement_disable_step_count(bool disable_immedietly);
 bool movement_step_count_is_enabled(void);
 bool movement_step_count_keep_on(void);
+bool movement_step_count_keep_off(void);
 void movement_set_step_count_keep_on(bool keep_on);
+void movement_set_step_count_keep_off(bool keep_off);
 void movement_reset_step_count(void);
 void movement_update_step_count_lis2dux(void);
 uint32_t movement_get_step_count(void);

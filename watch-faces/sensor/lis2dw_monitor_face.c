@@ -424,7 +424,7 @@ static void _monitor_update(lis2dw_monitor_state_t *state)
     float x = 0, y = 0, z = 0;
 
     lis2dw_read_fifo(&fifo, LIS2DW_FIFO_TIMEOUT / DISPLAY_FREQUENCY);
-    if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
+    if (fifo.count == 0) {
         return;
     }
 
@@ -472,6 +472,8 @@ static bool _monitor_loop(movement_event_t event, void *context)
                 return false;
             }
 
+            movement_set_step_count_keep_off(true);
+            movement_disable_step_count(true);
             /* Setup lis2dw to run in background at 12.5 Hz sampling rate. */
             movement_set_accelerometer_background_rate(LIS2DW_DATA_RATE_12_5_HZ);
 
@@ -607,6 +609,7 @@ bool lis2dw_monitor_face_loop(movement_event_t event, void *context)
 void lis2dw_monitor_face_resign(void *context)
 {
     (void) context;
+    movement_set_step_count_keep_off(false);
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
 }
