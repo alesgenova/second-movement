@@ -613,7 +613,6 @@ bool lis2dw_monitor_face_loop(movement_event_t event, void *context)
 void lis2dw_monitor_face_resign(void *context)
 {
     (void) context;
-    movement_set_step_count_keep_off(false);
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
 }

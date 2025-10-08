@@ -54,6 +54,12 @@ void accelerometer_status_face_setup(uint8_t watch_face_index, void ** context_p
 void accelerometer_status_face_activate(void *context) {
     accel_interrupt_count_state_t *state = (accel_interrupt_count_state_t *)context;
 
+    // Force the steps Counter to be turned off 
+    // immedietly in case it's on so this face can use the LIS2DW
+    if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
+        movement_disable_step_count(true);
+    }
+
     // never in settings mode at the start
     state->is_setting = false;
 
@@ -103,12 +109,6 @@ bool accelerometer_status_face_loop(movement_event_t event, void *context) {
     } else {
         switch (event.event_type) {
             case EVENT_ACTIVATE:
-            // Force the steps Counter to be turned off 
-            // immedietly in case it's on so this face can use the LIS2DW
-            if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
-                movement_disable_step_count(true);
-            }
-            // fall through
             case EVENT_TICK:
                 _accelerometer_status_face_update_display(state);
                 break;
