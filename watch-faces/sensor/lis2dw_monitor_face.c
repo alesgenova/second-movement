@@ -474,6 +474,7 @@ static bool _monitor_loop(movement_event_t event, void *context)
 
             // Force the steps Counter to be turned off 
             // immedietly in case it's on so this face can use the LIS2DW
+            movement_set_step_count_keep_off(true);
             if (movement_step_count_is_enabled()) {
                 movement_disable_step_count(true);
             }
@@ -615,6 +616,7 @@ void lis2dw_monitor_face_resign(void *context)
     (void) context;
     lis2dw_clear_fifo();
     lis2dw_disable_fifo();
+    movement_set_step_count_keep_off(false);
 }
 
 movement_watch_face_advisory_t lis2dw_monitor_face_advise(void *context)

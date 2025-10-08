@@ -155,6 +155,7 @@ bool lis2dw_logging_face_loop(movement_event_t event, void *context) {
             // Force the steps Counter to be turned off 
             // immedietly in case it's on so this face can use the LIS2DW
             if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
+                movement_set_step_count_keep_off(true);
                 movement_disable_step_count(true);
             }
             // fall through
@@ -190,6 +191,7 @@ bool lis2dw_logging_face_loop(movement_event_t event, void *context) {
 
 void lis2dw_logging_face_resign(void *context) {
     (void) context;
+    movement_set_step_count_keep_off(false);
     HAL_GPIO_A4_off();
 }
 

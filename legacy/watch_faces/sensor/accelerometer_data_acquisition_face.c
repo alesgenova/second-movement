@@ -104,6 +104,7 @@ bool accelerometer_data_acquisition_face_loop(movement_event_t event, void *cont
         // Force the steps Counter to be turned off 
         // immedietly in case it's on so this face can use the LIS2DW
         if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
+            movement_set_step_count_keep_off(true);
             movement_disable_step_count(true);
         }
         // fall through
@@ -239,6 +240,7 @@ void accelerometer_data_acquisition_face_resign(void *context) {
     state->countdown_ticks = 0;
     state->repeat_ticks = 0;
     state->reading_ticks = 0;
+    movement_set_step_count_keep_off(false);
 }
 
 static void update(accelerometer_data_acquisition_state_t *state) {
