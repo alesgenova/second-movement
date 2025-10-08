@@ -1097,15 +1097,14 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 }
 
 void enable_disable_step_count_times(watch_date_time_t date_time) {
-    if (movement_state.count_steps_keep_on || movement_state.count_steps_keep_off) return;
     movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
     if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
         bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
         if (!movement_state.counting_steps) {
-            if (in_count_step_hours) {
+            if (in_count_step_hours && !movement_state.count_steps_keep_off) {
                 movement_enable_step_count_multiple_attempts(2, false);
             }
-        } else if (!in_count_step_hours) {
+        } else if (!in_count_step_hours && !movement_state.count_steps_keep_on) {
             movement_disable_step_count(false);
         }
     } else if (movement_state.counting_steps) {
@@ -1651,8 +1650,10 @@ void app_setup(void) {
         watch_faces[movement_state.current_face_idx].activate(watch_face_contexts[movement_state.current_face_idx]);
         movement_volatile_state.pending_events |=  1 << EVENT_ACTIVATE;
 
-        if (movement_state.counting_steps) {
+        if (movement_state.count_steps_keep_on) {
             movement_enable_step_count_multiple_attempts(2, true);
+        } else {
+            enable_disable_step_count_times(movement_get_local_date_time());
         }
 
         if (movement_state.tap_enabled) {
@@ -1727,6 +1728,7 @@ static bool _switch_face(void) {
     movement_event_t event;
     event.subsecond = 0;
     event.event_type = EVENT_ACTIVATE;
+    enable_disable_step_count_times(movement_get_local_date_time());
     movement_state.watch_face_changed = false;
     bool can_sleep = wf->loop(event, watch_face_contexts[movement_state.current_face_idx]);
 
@@ -1853,12 +1855,11 @@ bool app_loop(void) {
 
         if (movement_state.counting_steps) {
             movement_disable_step_count(true);
-            movement_state.counting_steps = true; // This is to come back and reset it on wake
         }
 
         if (movement_state.tap_enabled) {
             movement_disable_tap_detection_if_available();
-            movement_state.tap_enabled = true;
+            movement_state.tap_enabled = true; // This is to come back and reset it on wake
         }
 
         // _sleep_mode_app_loop takes over at this point and loops until exit_sleep_mode is set by the extwake handler,

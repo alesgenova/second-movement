@@ -189,6 +189,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 
 void step_counter_face_resign(void *context) {
     (void) context;
+    movement_set_step_count_keep_on(false);
     movement_cancel_background_task();
 }
 
