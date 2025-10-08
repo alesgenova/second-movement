@@ -146,6 +146,7 @@ static stmdev_ctx_t dev_ctx = {
 static uint32_t _total_step_count = 0;
 static uint8_t _awake_state_lis2dw = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
 static uint16_t _step_count_prev_lis2dux = 0;  // When the LIS2DUX wakes, its step count resets. This value adds onto it if we get a lower step count
+static uint8_t _step_fifo_timeout = LIS2DW_FIFO_TIMEOUT_SECOND;
 #ifdef I2C_SERCOM
 static const uint8_t movement_max_step_fifo_misreads = 3;
 static uint8_t movement_step_fifo_misreads = 0;
@@ -327,6 +328,8 @@ static void _movement_renew_top_of_minute_alarm(void) {
 static uint32_t _movement_get_accelerometer_events() {
     uint32_t accelerometer_events = 0;
 
+    if (!movement_state.tap_enabled) return accelerometer_events;
+
     uint8_t int_src = lis2dw_get_interrupt_source();
 
     if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
@@ -479,6 +482,7 @@ void movement_request_tick_frequency(uint8_t freq) {
     // 0x01 (1 Hz) will have 7 leading zeros for PER7. 0x80 (128 Hz) will have no leading zeroes for PER0.
     uint8_t per_n = __builtin_clz(tmp);
 
+    _step_fifo_timeout = LIS2DW_FIFO_TIMEOUT_SECOND / movement_state.tick_frequency;
     movement_state.tick_frequency = freq;
     movement_state.tick_pern = per_n;
 
@@ -1291,7 +1295,7 @@ static uint8_t movement_count_new_steps_lis2dw(void)
         return new_steps;
     }
     lis2dw_fifo_t fifo = {0};
-    lis2dw_read_fifo(&fifo, LIS2DW_FIFO_TIMEOUT / movement_state.tick_frequency);
+    lis2dw_read_fifo(&fifo, _step_fifo_timeout);
     if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
         if (movement_step_fifo_misreads != CHAR_MAX) movement_step_fifo_misreads++;
         if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads) {
@@ -2067,21 +2071,7 @@ void cb_tick(void) {
 }
 
 void cb_accelerometer_event(void) {
-<<<<<<< HEAD
     movement_volatile_state.has_pending_accelerometer = true;
-=======
-    if (!movement_state.tap_enabled) return;
-    uint8_t int_src = lis2dw_get_interrupt_source();
-
-    if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
-        movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
-        printf("Double tap!\r\n");
-    }
-    if (int_src & LIS2DW_REG_ALL_INT_SRC_SINGLE_TAP) {
-        movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
-        printf("Single tap!\r\n");
-    }
->>>>>>> 86dd180d (We now don't read tap events if tapping isn't enabled)
 }
 
 #define PRINT_LIS2DUX_EVENTS false
