@@ -411,12 +411,14 @@ static void _movement_handle_button_presses(uint32_t pending_events) {
 }
 
 static void _movement_handle_top_of_minute(void) {
-    watch_date_time_t date_time = watch_rtc_get_date_time();
+    watch_date_time_t date_time = movement_get_local_date_time();
 
     // update the DST offset cache every 30 minutes, since someplace in the world could change.
     if (date_time.unit.minute % 30 == 0) {
         _movement_update_dst_offset_cache();
     }
+
+    enable_disable_step_count_times(date_time);
 
     for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
         // For each face that offers an advisory...
@@ -1094,10 +1096,27 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
     return false;
 }
 
+void enable_disable_step_count_times(watch_date_time_t date_time) {
+    if (movement_state.count_steps_keep_on || movement_state.count_steps_keep_off) return;
+    movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
+    if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
+        bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
+        if (!movement_state.counting_steps) {
+            if (in_count_step_hours) {
+                movement_enable_step_count_multiple_attempts(2, false);
+            }
+        } else if (!in_count_step_hours) {
+            movement_disable_step_count(false);
+        }
+    } else if (movement_state.counting_steps) {
+        movement_disable_step_count(false);
+    }
+}
+
 bool movement_enable_step_count(bool force_enable) {
 #ifdef I2C_SERCOM
-    movement_state.step_count_disable_req_sec = -1;
     if (movement_state.count_steps_keep_off) return false;
+    movement_state.step_count_disable_req_sec = -1;
     if (!force_enable && movement_state.counting_steps) return true;
     if (movement_state.has_lis2dw) {
 #if COUNT_STEPS_USE_ESPRUINO

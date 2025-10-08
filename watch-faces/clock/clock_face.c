@@ -232,24 +232,6 @@ void clock_face_activate(void *context) {
     state->date_time.previous.reg = 0xFFFFFFFF;
 }
 
-static void enable_disable_step_count_times(watch_date_time_t date_time) {
-    if (movement_step_count_keep_on()) return;
-    movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
-    if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
-        bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
-        if (!movement_step_count_is_enabled()) {
-            if (in_count_step_hours) {
-                movement_enable_step_count_multiple_attempts(2, false);
-            }
-        } else if (!in_count_step_hours) {
-            movement_disable_step_count(false);
-        }
-    } else if (movement_step_count_is_enabled()) {
-        movement_disable_step_count(false);
-    }
-}
-
-
 bool clock_face_loop(movement_event_t event, void *context) {
     clock_state_t *state = (clock_state_t *) context;
     watch_date_time_t current;
@@ -297,12 +279,9 @@ void clock_face_resign(void *context) {
 movement_watch_face_advisory_t clock_face_advise(void *context) {
     movement_watch_face_advisory_t retval = { 0 };
     clock_state_t *state = (clock_state_t *) context;
-    watch_date_time_t date_time = movement_get_local_date_time();
-
-    // In case we need to stop the counter and this face isn't in the foreground
-    enable_disable_step_count_times(date_time);
 
     if (state->time_signal_enabled) {
+        watch_date_time_t date_time = movement_get_local_date_time();
         retval.wants_background_task = date_time.unit.minute == 0;
     }
 
