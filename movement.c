@@ -900,6 +900,13 @@ void movement_set_alarm_enabled(bool value) {
 bool movement_enable_tap_detection_if_available(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dw) {
+
+        if (movement_state.counting_steps) {
+            movement_state.count_steps_keep_off = true;
+            // Step Counter uses a frequency of 12.5Hz, so the 4000Hz reading of tap detection will throw things off
+            movement_disable_step_count(true);
+        }
+
         // configure tap duration threshold and enable Z axis
         lis2dw_configure_tap_threshold(0, 0, 12, LIS2DW_REG_TAP_THS_Z_Z_AXIS_ENABLE);
         lis2dw_configure_tap_duration(2, 2, 2);
@@ -970,6 +977,7 @@ bool movement_enable_tap_detection_if_available(void) {
 bool movement_disable_tap_detection_if_available(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dw) {
+        movement_state.count_steps_keep_off = true;
         // Ramp data rate back down to the usual lowest rate to save power.
         lis2dw_set_low_noise_mode(false);
         lis2dw_set_data_rate(movement_state.accelerometer_background_rate);
@@ -1283,11 +1291,11 @@ static uint8_t movement_count_new_steps_lis2dw(void)
         return new_steps;
     }
     lis2dw_fifo_t fifo = {0};
-    lis2dw_read_fifo(&fifo);
+    lis2dw_read_fifo(&fifo, LIS2DW_FIFO_TIMEOUT / movement_state.tick_frequency);
     if (fifo.count == 0 || fifo.count > LIS2DW_FIFO_MAX_COUNT) {
         if (movement_step_fifo_misreads != CHAR_MAX) movement_step_fifo_misreads++;
         if (movement_step_fifo_misreads >= movement_max_step_fifo_misreads) {
-            if (lis2dw_get_device_id() == LIS2DW_WHO_AM_I_VAL) {
+            if (movement_still_sees_accelerometer()) {
                 movement_disable_step_count(true);
             } else {
                 movement_state.counting_steps = false;

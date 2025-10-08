@@ -53,6 +53,10 @@ uint8_t count_steps_simple(lis2dw_fifo_t *fifo_data) {
 #if DEBUG_PRINT
         printf("%lu; ", magnitude);
 #endif
+        if (magnitude == 0) {
+          // We ignore readings where everything is zero, because that's almost definetly a misread
+          continue;
+        }
         if (magnitude >= step_counter_threshold) {
             new_steps += 1;
             i += SIMPLE_SAMP_IGNORE_STEP;
@@ -345,6 +349,10 @@ uint8_t count_steps_espruino(lis2dw_fifo_t *fifo_data) {
 
     for (uint8_t i = 0; i < fifo_data->count; i++) {
         uint32_t magnitude = count_steps_approx_l2_norm(fifo_data->readings[i]);
+        if (magnitude == 0) {
+          // We ignore readings where everything is zero, because that's almost definetly a misread
+          continue;
+        }
         new_steps += count_steps_espruino_sample(magnitude << 1);
     }
 
