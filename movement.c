@@ -478,6 +478,8 @@ void movement_request_tick_frequency(uint8_t freq) {
     // 0x01 (1 Hz) will have 7 leading zeros for PER7. 0x80 (128 Hz) will have no leading zeroes for PER0.
     uint8_t per_n = __builtin_clz(tmp);
 
+    // While we try to count steps when the tick faster than 1 second, it may be inaccurate since
+    // all 12-13 samples in the FIFO may not be read.
     _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND / movement_state.tick_frequency;
     movement_state.tick_frequency = freq;
     movement_state.tick_pern = per_n;
@@ -1276,12 +1278,6 @@ static uint8_t movement_count_new_steps_lis2dw(void)
 {
     uint8_t new_steps = 0;
     if (_awake_state_lis2dw == 0) {
-        return new_steps;
-    }
-    if (movement_volatile_state.light_button.is_down ||
-        movement_volatile_state.mode_button.is_down ||
-        movement_volatile_state.alarm_button.is_down) {
-        // Don't count steps while a button is held down.
         return new_steps;
     }
     if (_awake_state_lis2dw == 1) {
