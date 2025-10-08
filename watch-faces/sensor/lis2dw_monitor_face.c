@@ -472,7 +472,7 @@ static bool _monitor_loop(movement_event_t event, void *context)
                 return false;
             }
 
-            // Force the steps Counter to be turned off 
+            // Force the Step Counter to be turned off 
             // immedietly in case it's on so this face can use the LIS2DW
             movement_set_step_count_keep_off(true);
             if (movement_step_count_is_enabled()) {
