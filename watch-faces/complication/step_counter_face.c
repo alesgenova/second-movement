@@ -140,6 +140,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 return false;
             }
             logger_state->sensor_seen = movement_still_sees_accelerometer() && movement_enable_step_count_multiple_attempts(2, false);
+            movement_set_step_count_keep_off(false);
             movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
@@ -189,8 +190,11 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
 void step_counter_face_resign(void *context) {
     (void) context;
     movement_set_step_count_keep_on(false);
-    if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
-        movement_disable_step_count(false);
+    if (movement_has_lis2dw()) {
+        movement_set_step_count_keep_off(true);
+        if (movement_step_count_is_enabled()) {
+            movement_disable_step_count(false);
+        }
     }
     movement_cancel_background_task();
 }

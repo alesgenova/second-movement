@@ -472,8 +472,12 @@ static bool _monitor_loop(movement_event_t event, void *context)
                 return false;
             }
 
-            movement_set_step_count_keep_off(true);
-            movement_disable_step_count(true);
+            // Force the steps Counter to be turned off 
+            // immedietly in case it's on so this face can use the LIS2DW
+            if (movement_step_count_is_enabled()) {
+                movement_disable_step_count(true);
+            }
+
             /* Setup lis2dw to run in background at 12.5 Hz sampling rate. */
             movement_set_accelerometer_background_rate(LIS2DW_DATA_RATE_12_5_HZ);
 
