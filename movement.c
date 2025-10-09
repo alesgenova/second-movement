@@ -813,8 +813,8 @@ void movement_set_signal_volume(watch_buzzer_volume_t value) {
 }
 
 movement_step_count_option_t movement_get_when_to_count_steps(void) {
-    if (!movement_state.has_lis2dw && !movement_state.has_lis2dux) return MOVEMENT_SC_NOT_INSTALLED;
-    return movement_state.when_to_count_steps;
+    if (movement_state.has_lis2dw || movement_state.has_lis2dux) return movement_state.when_to_count_steps;
+    return MOVEMENT_SC_NOT_INSTALLED;
 }
 
 void movement_set_when_to_count_steps(movement_step_count_option_t value) {
@@ -979,7 +979,7 @@ bool movement_enable_tap_detection_if_available(void) {
 bool movement_disable_tap_detection_if_available(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dw) {
-        movement_state.count_steps_keep_off = true;
+        movement_state.count_steps_keep_off = false;
         // Ramp data rate back down to the usual lowest rate to save power.
         lis2dw_set_low_noise_mode(false);
         lis2dw_set_data_rate(movement_state.accelerometer_background_rate);
@@ -1108,17 +1108,17 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 
 void enable_disable_step_count_times(watch_date_time_t date_time) {
     movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
-    if (when_to_count_steps != MOVEMENT_SC_OFF && when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
-        bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
-        if (!movement_state.counting_steps) {
-            if (in_count_step_hours && !movement_state.count_steps_keep_off) {
-                movement_enable_step_count_multiple_attempts(2, false);
-            }
-        } else if (!in_count_step_hours && !movement_state.count_steps_keep_on) {
+    if (when_to_count_steps == MOVEMENT_SC_OFF || when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
+        if (movement_state.counting_steps) {
             movement_disable_step_count(false);
         }
-    } else if (movement_state.counting_steps) {
+        return;
+    }
+    bool in_count_step_hours = movement_in_step_counter_interval(date_time.unit.hour);
+    if (movement_state.counting_steps && !in_count_step_hours && !movement_state.count_steps_keep_on) {
         movement_disable_step_count(false);
+    } else if (!movement_state.counting_steps && in_count_step_hours && !movement_state.count_steps_keep_off) {
+        movement_enable_step_count_multiple_attempts(2, false);
     }
 }
 
