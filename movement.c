@@ -1222,8 +1222,10 @@ bool movement_disable_step_count(bool disable_immedietly) {
         lis2dw_clear_fifo();
         lis2dw_disable_fifo();
         if (movement_state.tap_enabled) return true;
-        movement_state.accelerometer_background_rate = LIS2DW_DATA_RATE_POWERDOWN;
-        return movement_disable_tap_detection_if_available();
+        lis2dw_set_low_noise_mode(false);
+        movement_set_accelerometer_background_rate(LIS2DW_DATA_RATE_POWERDOWN);
+        lis2dw_set_mode(LIS2DW_MODE_LOW_POWER);
+        return true;
     }
     else if (movement_state.has_lis2dux) {
         movement_state.counting_steps = false;
