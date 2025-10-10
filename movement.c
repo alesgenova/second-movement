@@ -1108,7 +1108,7 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 
 void enable_disable_step_count_times(watch_date_time_t date_time) {
     movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
-    if (when_to_count_steps == MOVEMENT_SC_OFF || when_to_count_steps != MOVEMENT_SC_NOT_INSTALLED) {
+    if (when_to_count_steps == MOVEMENT_SC_OFF || when_to_count_steps == MOVEMENT_SC_NOT_INSTALLED) {
         if (movement_state.counting_steps) {
             movement_disable_step_count(false);
         }
