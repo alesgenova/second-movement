@@ -1118,7 +1118,7 @@ void enable_disable_step_count_times(watch_date_time_t date_time) {
     if (movement_state.counting_steps && !in_count_step_hours && !movement_state.count_steps_keep_on) {
         movement_disable_step_count(false);
     } else if (!movement_state.counting_steps && in_count_step_hours && !movement_state.count_steps_keep_off) {
-        movement_enable_step_count_multiple_attempts(2, false);
+        movement_enable_step_count_multiple_attempts(3, false);
     }
 }
 
@@ -1199,6 +1199,7 @@ bool movement_enable_step_count(bool force_enable) {
 bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_enable) {
     for (uint8_t i = 0; i < max_tries; i++)
     {  // Truly a hack, but we'll try multiple times to enable the get the step counter working
+        if (!movement_still_sees_accelerometer()) continue;
         if (movement_enable_step_count(force_enable)) return true;
     }
     return false;
@@ -1643,7 +1644,7 @@ void app_setup(void) {
         movement_volatile_state.pending_events |=  1 << EVENT_ACTIVATE;
 
         if (movement_state.count_steps_keep_on) {
-            movement_enable_step_count_multiple_attempts(2, true);
+            movement_enable_step_count_multiple_attempts(3, true);
         } else {
             enable_disable_step_count_times(movement_get_local_date_time());
         }

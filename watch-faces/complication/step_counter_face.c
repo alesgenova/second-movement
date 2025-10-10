@@ -141,7 +141,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             movement_set_step_count_keep_off(false);
             movement_set_step_count_keep_on(true);
-            logger_state->sensor_seen = movement_still_sees_accelerometer() && movement_enable_step_count_multiple_attempts(2, false);
+            logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
             logger_state->can_sleep = false;
