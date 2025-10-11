@@ -141,11 +141,16 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             movement_set_step_count_keep_off(false);
             movement_set_step_count_keep_on(true);
-            logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 0;
             logger_state->can_sleep = false;
             movement_schedule_background_task(distant_future);
+            if (!movement_step_count_is_enabled()) {
+                // There can be a delay in showing the screen when turning on the step counter,
+                // So if it's off, display stale step counts that'll then get updated
+                _step_counter_face_logging_update_display(logger_state);
+            }
+            logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
             movement_update_step_count_lis2dux();
             _step_counter_face_logging_update_display(logger_state);
             break;
