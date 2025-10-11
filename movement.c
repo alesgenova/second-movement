@@ -118,6 +118,12 @@ static int8_t *_pending_sequence;
 int8_t _movement_dst_offset_cache[NUM_ZONE_NAMES] = {0};
 #define TIMEZONE_DOES_NOT_OBSERVE (-127)
 
+bool _movement_is_secondary_page(uint8_t page_index);
+bool _movement_is_tertiary_page(uint8_t page_index);
+uint8_t _movement_find_next_page(uint8_t page_index);
+uint8_t _movement_find_first_enabled_page(uint8_t page_index);
+void _movement_determine_page_group(uint8_t page_index, uint8_t* group_min_index, uint8_t* group_max_index, bool* is_secondary, bool* is_tertiary);
+
 void cb_mode_btn_interrupt(void);
 void cb_light_btn_interrupt(void);
 void cb_alarm_btn_interrupt(void);
@@ -459,13 +465,17 @@ bool movement_default_loop_handler(movement_event_t event) {
             }
             break;
         case EVENT_MODE_LONG_PRESS: {
-            uint8_t home_page = movement_find_first_enabled_page(0);
-            uint8_t home_page_plus_one = movement_find_first_enabled_page(1);
+            uint8_t home_page = _movement_find_first_enabled_page(0);
+            uint8_t home_page_plus_one = _movement_find_first_enabled_page(_movement_find_next_page(home_page));
             if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page_plus_one) {
                 movement_move_to_page(movement_state.secondary_page_idx);
             } else {
                 movement_move_to_page(home_page);
             }
+            break;
+        }
+        case EVENT_MODE_REALLY_LONG_PRESS: {
+            movement_move_to_page(movement_state.tertiary_page_idx);
             break;
         }
         default:
@@ -487,21 +497,65 @@ uint8_t movement_face_to_page(uint8_t watch_face_index) {
     return face_to_page[watch_face_index];
 }
 
-bool movement_is_secondary_page(uint8_t page_index) {
+bool _movement_is_secondary_page(uint8_t page_index) {
     // NOTE: If the secondary_page_index is 0, effectively all pages are secondary
     return page_index >= movement_state.secondary_page_idx;
 }
 
-uint8_t movement_find_first_enabled_page(uint8_t page_index) {
+bool _movement_is_tertiary_page(uint8_t page_index) {
+    // NOTE: If the tertiary_page_index is 0, effectively all pages are tertiary
+    return page_index >= movement_state.tertiary_page_idx;
+}
+
+void _movement_determine_page_group(uint8_t page_index, uint8_t* group_min_index, uint8_t* group_max_index, bool* is_secondary, bool* is_tertiary) {
+    if (_movement_is_tertiary_page(page_index)) {
+        *group_max_index = MOVEMENT_NUM_FACES;
+        *group_min_index = movement_state.tertiary_page_idx;
+        *is_secondary = false;
+        *is_tertiary = true;
+    } else if (_movement_is_secondary_page(page_index)) {
+        *group_max_index = movement_state.tertiary_page_idx;
+        *group_min_index = movement_state.secondary_page_idx;
+        *is_secondary = true;
+        *is_tertiary = false;
+    } else {
+        *group_max_index = movement_state.secondary_page_idx;
+        *group_min_index = 0;
+        *is_secondary = false;
+        *is_tertiary = false;
+    }
+}
+
+uint8_t _movement_find_next_page(uint8_t page_index) {
+    uint8_t page_max;
+
+    if (_movement_is_tertiary_page(page_index)) {
+        page_max = MOVEMENT_NUM_FACES;
+    } else if (_movement_is_secondary_page(page_index)) {
+        page_max = movement_state.tertiary_page_idx;
+    } else {
+        page_max = movement_state.secondary_page_idx;
+    }
+
+    return (page_index + 1) % page_max;
+}
+
+uint8_t _movement_find_first_enabled_page(uint8_t page_index) {
     bool found = false;
-    bool is_secondary = movement_is_secondary_page(page_index);
 
     uint8_t enabled_page_index = page_index;
 
-    uint8_t max_page_index = is_secondary ? MOVEMENT_NUM_FACES : movement_state.secondary_page_idx;
+    bool is_secondary;
+    bool is_tertiary;
+    uint8_t max_page_index;
+    uint8_t min_page_index;
 
-    for (uint8_t i = 0; i < max_page_index; i++) {
-        uint8_t curr_page_index = (page_index + i) % max_page_index;
+    _movement_determine_page_group(page_index, &min_page_index, &max_page_index, &is_secondary, &is_tertiary);
+
+    uint8_t num_pages = max_page_index - min_page_index;
+
+    for (uint8_t i = 0; i < num_pages; i++) {
+        uint8_t curr_page_index = min_page_index + (page_index - min_page_index + i) % num_pages;
         if (movement_is_page_enabled(curr_page_index)) {
             enabled_page_index  = curr_page_index;
             found = true;
@@ -510,14 +564,14 @@ uint8_t movement_find_first_enabled_page(uint8_t page_index) {
         }
     }
 
-    if (found || is_secondary) {
+    if (found) {
         return enabled_page_index;
     }
 
-    // Corner case: If requesting a primary face (for example go to page 0)
-    // but all primary pages are disable, extend search to secondary pages
-    for (uint8_t i = movement_state.secondary_page_idx; i < MOVEMENT_NUM_FACES; i++) {
-        uint8_t curr_page_index = i % MOVEMENT_NUM_FACES;
+    // Corner case: If requesting a primary/secondary face (for example go to page 0)
+    // but all primary/secondary pages are disable, extend search to all pages
+    for (uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
+        uint8_t curr_page_index = (page_index + i) % MOVEMENT_NUM_FACES;
         if (movement_is_page_enabled(curr_page_index)) {
             enabled_page_index  = curr_page_index;
 
@@ -530,13 +584,11 @@ uint8_t movement_find_first_enabled_page(uint8_t page_index) {
 
 void movement_move_to_page(uint8_t page_index) {
     movement_state.watch_page_changed = true;
-    movement_state.next_page_idx = movement_find_first_enabled_page(page_index);
+    movement_state.next_page_idx = _movement_find_first_enabled_page(page_index);
 }
 
 void movement_move_to_next_page(void) {
-    uint8_t page_max = movement_is_secondary_page(movement_state.current_page_idx) ? MOVEMENT_NUM_FACES : movement_state.secondary_page_idx;
-
-    movement_move_to_page((movement_state.current_page_idx + 1) % page_max);
+    movement_move_to_page(_movement_find_next_page(movement_state.current_page_idx));
 }
 
 void movement_swap_page_order(uint8_t page_a_index, uint8_t page_b_index) {
@@ -576,6 +628,20 @@ uint8_t movement_get_secondary_page(void) {
 
 void movement_set_secondary_page(uint8_t page_index) {
     movement_state.secondary_page_idx = page_index;
+    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
+        movement_set_tertiary_page(movement_state.secondary_page_idx);
+    }
+}
+
+uint8_t movement_get_tertiary_page(void) {
+    return movement_state.tertiary_page_idx;
+}
+
+void movement_set_tertiary_page(uint8_t page_index) {
+    movement_state.tertiary_page_idx = page_index;
+    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
+        movement_set_secondary_page(movement_state.tertiary_page_idx);
+    }
 }
 
 void movement_schedule_background_task(watch_date_time_t date_time) {
@@ -1128,7 +1194,11 @@ void app_setup(void) {
         }
 
         movement_state.secondary_page_idx = MOVEMENT_SECONDARY_FACE_INDEX;
-        movement_state.current_page_idx = movement_find_first_enabled_page(0);
+        movement_state.tertiary_page_idx = MOVEMENT_TERTIARY_FACE_INDEX;
+        if (movement_state.tertiary_page_idx < movement_state.secondary_page_idx) {
+            movement_state.tertiary_page_idx = movement_state.secondary_page_idx;
+        }
+        movement_state.current_page_idx = _movement_find_first_enabled_page(0);
         movement_state.current_face_idx = movement_page_to_face(movement_state.current_page_idx);
 
 #if __EMSCRIPTEN__
@@ -1281,7 +1351,7 @@ static bool _switch_face(void) {
 
     if (movement_state.settings.bit.button_should_sound) {
         // low note for nonzero case, high note for return to watch_face 0
-        uint8_t home_page = movement_find_first_enabled_page(0);
+        uint8_t home_page = _movement_find_first_enabled_page(0);
         movement_play_note(movement_state.next_page_idx == home_page ? BUZZER_NOTE_C8 : BUZZER_NOTE_C7, 50);
     }
 
