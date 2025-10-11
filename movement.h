@@ -274,6 +274,7 @@ typedef struct {
     uint8_t current_page_idx;
     uint8_t next_page_idx;
     uint8_t secondary_page_idx;
+    uint8_t tertiary_page_idx;
     bool watch_page_changed;
 
     // LED stuff
@@ -316,9 +317,6 @@ uint8_t movement_get_num_faces(void);
 uint8_t movement_page_to_face(uint8_t page_index);
 uint8_t movement_face_to_page(uint8_t face_index);
 
-bool movement_is_secondary_page(uint8_t page_index);
-uint8_t movement_find_first_enabled_page(uint8_t page_index);
-
 void movement_swap_page_order(uint8_t page_a_index, uint8_t page_b_index);
 
 void movement_enable_page(uint8_t page_index, bool enable);
@@ -329,6 +327,9 @@ bool movement_is_face_enabled(uint8_t watch_face_index);
 
 uint8_t movement_get_secondary_page(void);
 void movement_set_secondary_page(uint8_t page_index);
+
+uint8_t movement_get_tertiary_page(void);
+void movement_set_tertiary_page(uint8_t page_index);
 
 bool movement_default_loop_handler(movement_event_t event);
 
