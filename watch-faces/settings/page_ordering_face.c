@@ -32,6 +32,8 @@ typedef struct {
     bool touched;
     bool tick_tock;
     bool reordering;
+    bool pending_secondary_face;
+    bool pending_tertiary_face;
 } page_ordering_face_state_t;
 
 void page_ordering_face_setup(uint8_t watch_face_index, void ** context_ptr) {
@@ -68,10 +70,17 @@ static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
     }
 
     // Whether the page is the first secondary page
-    if (state->current_page_index == movement_get_secondary_page()) {
+    if (state->pending_secondary_face || state->current_page_index == movement_get_secondary_page()) {
         watch_set_colon();
     } else {
         watch_clear_colon();
+    }
+
+    // Whether the page is the first tertiary page
+    if (state->pending_tertiary_face || state->current_page_index == movement_get_tertiary_page()) {
+        watch_set_indicator(WATCH_INDICATOR_LAP);
+    } else {
+        watch_clear_indicator(WATCH_INDICATOR_LAP);
     }
 
     // Whether the page is enabled
@@ -111,8 +120,15 @@ static void _page_ordering_turn_page(page_ordering_face_state_t *state, int8_t c
     state->current_page_index = new_page_index;
 }
 
-static void _page_ordering_set_secondary_page(page_ordering_face_state_t *state) {
-    movement_set_secondary_page(state->current_page_index);
+static void _page_ordering_commit_secondary_or_tertiary_face(page_ordering_face_state_t *state) {
+    if (state->pending_tertiary_face) {
+        movement_set_tertiary_page(state->current_page_index);
+    } else {
+        movement_set_secondary_page(state->current_page_index);
+    }
+
+    state->pending_secondary_face = false;
+    state->pending_tertiary_face = false;
     state->touched = true;
 }
 
@@ -134,10 +150,22 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ALARM_LONG_PRESS:
             if (state->reordering) {
-                _page_ordering_set_secondary_page(state);
-                state->reordering = false;
+                state->pending_secondary_face = true;
+                state->pending_tertiary_face = false;
             } else {
                 state->reordering = true;
+            }
+            break;
+        case EVENT_ALARM_REALLY_LONG_PRESS:
+            if (state->reordering) {
+                state->pending_secondary_face = false;
+                state->pending_tertiary_face = true;
+            }
+            break;
+        case EVENT_ALARM_LONG_UP:
+            if (state->reordering && (state->pending_secondary_face || state->pending_tertiary_face)) {
+                _page_ordering_commit_secondary_or_tertiary_face(state);
+                state->reordering = false;
             }
             break;
         case EVENT_LIGHT_BUTTON_UP:
