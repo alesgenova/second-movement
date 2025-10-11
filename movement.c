@@ -1107,6 +1107,8 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold) {
 }
 
 void enable_disable_step_count_times(watch_date_time_t date_time) {
+#ifdef I2C_SERCOM
+    if (movement_volatile_state.is_sleeping) return;
     movement_step_count_option_t when_to_count_steps = movement_get_when_to_count_steps();
     if (when_to_count_steps == MOVEMENT_SC_OFF || when_to_count_steps == MOVEMENT_SC_NOT_INSTALLED) {
         if (movement_state.counting_steps) {
@@ -1120,6 +1122,7 @@ void enable_disable_step_count_times(watch_date_time_t date_time) {
     } else if (!movement_state.counting_steps && in_count_step_hours && !movement_state.count_steps_keep_off) {
         movement_enable_step_count_multiple_attempts(3, false);
     }
+#endif
 }
 
 bool movement_enable_step_count(bool force_enable) {
@@ -1643,6 +1646,7 @@ void app_setup(void) {
         watch_faces[movement_state.current_face_idx].activate(watch_face_contexts[movement_state.current_face_idx]);
         movement_volatile_state.pending_events |=  1 << EVENT_ACTIVATE;
 
+#ifdef I2C_SERCOM
         if (movement_state.count_steps_keep_on) {
             movement_enable_step_count_multiple_attempts(3, true);
         } else {
@@ -1652,6 +1656,7 @@ void app_setup(void) {
         if (movement_state.tap_enabled) {
             movement_enable_tap_detection_if_available();
         }
+#endif
     }
 }
 
