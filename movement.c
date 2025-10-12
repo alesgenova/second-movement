@@ -1040,6 +1040,26 @@ bool movement_still_sees_accelerometer(void) {
     return false;
 }
 
+bool movement_still_sees_accelerometer_multiple_attempts(uint8_t max_tries) {
+    for (uint8_t i = 0; i < max_tries; i++)
+    {  // We've seen that the LIS2DUX sometimes reads 32 onthe first read, not 71
+        if (movement_still_sees_accelerometer()) return true;
+    }
+    return false;
+}
+
+uint8_t movement_get_accelerometer_id(void) {
+    uint8_t id = 0;
+#ifdef I2C_SERCOM
+    if (movement_state.has_lis2dw) {
+        id = lis2dw_get_device_id();
+    } else if (movement_state.has_lis2dux) {
+        lis2dux12_device_id_get(&dev_ctx, &id);
+    }
+#endif
+    return id;
+}
+
 uint8_t movement_get_accelerometer_background_rate(void) {
     if (movement_state.has_lis2dw || movement_state.has_lis2dux) return movement_state.accelerometer_background_rate;
     else return LIS2DW_DATA_RATE_POWERDOWN;

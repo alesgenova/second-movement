@@ -423,6 +423,8 @@ bool movement_disable_tap_detection_if_available(void);
 bool movement_has_lis2dw(void);
 bool movement_has_lis2dux(void);
 bool movement_still_sees_accelerometer(void);
+bool movement_still_sees_accelerometer_multiple_attempts(uint8_t max_tries);
+uint8_t movement_get_accelerometer_id(void);
 
 // gets and sets the accelerometer data rate in the background
 uint8_t movement_get_accelerometer_background_rate(void);
