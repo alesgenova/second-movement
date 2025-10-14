@@ -1266,6 +1266,7 @@ bool movement_disable_step_count(bool disable_immedietly) {
         lis2dux12_emb_pin_int2_route_get(&dev_ctx, &emb_pin_int);
         emb_pin_int.tilt = PROPERTY_DISABLE;
         lis2dux12_emb_pin_int2_route_set(&dev_ctx, &emb_pin_int);
+        movement_volatile_state.step_count_needs_updating = false;
         if (!movement_state.tap_enabled) {
             movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
             lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
