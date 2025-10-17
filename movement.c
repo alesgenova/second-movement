@@ -2133,11 +2133,7 @@ void cb_accelerometer_lis2dux_event(void) {
     }
 
     if (movement_state.counting_steps && movement_state.has_lis2dux) {
-        lis2dux12_embedded_status_t emb_status;
-        lis2dux12_embedded_status_get(&dev_ctx, &emb_status);
-        if (emb_status.is_step_det) {
-            movement_volatile_state.step_count_needs_updating = true;
-        }
+        movement_volatile_state.step_count_needs_updating = true;
     }
 #endif
 }
