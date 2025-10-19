@@ -117,21 +117,29 @@ movement_volatile_state_t movement_volatile_state;
 #define PRINT_LIS2DUX_COMM false
 static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len) {
     (void)handle;
+    int32_t retval = 0;
     const int16_t dev_addr = LIS2DUX12_I2C_ADD_H >> 1;
     for (uint16_t i = 0; i < len; i++) {
-        watch_i2c_write8(dev_addr, reg + i, bufp[i]);
+        retval = watch_i2c_write8(dev_addr, reg + i, bufp[i]);
+        if (retval != 0) {
+            return retval;
+        }
 #if PRINT_LIS2DUX_COMM
         printf("Write Add: %X Reg 0x%02X: 0x%02X\r\n", dev_addr, reg + i, bufp[i]);
 #endif
     }
-    return 0;
+    return retval;
 }
 
 static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len) {
     (void)handle;
+    int32_t retval = 0;
     const int16_t dev_addr = LIS2DUX12_I2C_ADD_H >> 1;
-    watch_i2c_send(dev_addr, &reg, 1);
-    watch_i2c_receive(dev_addr, bufp, len);
+    retval = watch_i2c_send(dev_addr, &reg, 1);
+    if (retval != 0) {
+        return retval;
+    }
+    retval = watch_i2c_receive(dev_addr, bufp, len);
 #if PRINT_LIS2DUX_COMM
     printf("Read  Add: %X Reg 0x%02X:", dev_addr, reg);
     for (uint16_t i = 0; i < len; i++) {
@@ -139,7 +147,7 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t 
     }
     printf("\r\n");
 #endif
-    return 0;
+    return retval;
 }
 
 static void platform_delay(uint32_t millisec) {
@@ -1350,7 +1358,10 @@ void movement_update_step_count_lis2dux(void) {
     if (movement_state.has_lis2dux) {
         movement_volatile_state.step_count_needs_updating = false;
         uint16_t step_count = 0;
-        lis2dux12_stpcnt_steps_get(&dev_ctx, &step_count);
+        if (lis2dux12_stpcnt_steps_get(&dev_ctx, &step_count) != 0) {
+            // Failed to properly read steps.
+            return;
+        }
         if (step_count >= _step_count_prev_lis2dux) {
             // Normal increase
             _total_step_count += (step_count - _step_count_prev_lis2dux);
