@@ -27,7 +27,6 @@
 #include "step_counter_face.h"
 
 #define STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN 5
-#define STEP_COUNTER_SECONDS_DONT_UPDATE_LIS2DUX 5
 #define STEP_COUNTER_MAX_STEPS_DISPLAY 999999
 
 // distant future for background task: January 1, 2083
@@ -165,12 +164,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TICK:
             if(displaying_curr_step_count) {
-                // To avoid constant drain, we only check for new steps on the LIS2DUX every STEP_COUNTER_SECONDS_DONT_UPDATE_LIS2DUX seconds
-                if (movement_has_lis2dux() && (logger_state->sec_inactivity % STEP_COUNTER_SECONDS_DONT_UPDATE_LIS2DUX) != 0) {
-                    step_count = logger_state->step_count_prev;
-                } else {
-                    step_count = get_step_count();
-                }
+                step_count = get_step_count();
                 if (step_count != logger_state->step_count_prev) {
                     allow_sleeping(false, logger_state);
                     logger_state->sec_inactivity = 1;
