@@ -1240,8 +1240,10 @@ bool movement_enable_step_count(bool force_enable) {
 bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_enable) {
     for (uint8_t i = 0; i < max_tries; i++)
     {  // Truly a hack, but we'll try multiple times to enable the get the step counter working
-        if (!movement_still_sees_accelerometer()) continue;
-        if (movement_enable_step_count(force_enable)) return true;
+        if (movement_still_sees_accelerometer()) {
+            if (movement_enable_step_count(force_enable)) return true;
+        }
+        delay_ms(10);
     }
     return false;
 }
