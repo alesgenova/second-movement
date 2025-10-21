@@ -43,6 +43,9 @@
 #define CLOCK_FACE_LOW_BATTERY_VOLTAGE_THRESHOLD 2400
 #endif
 
+static const uint8_t QUICK_TIMERS[] = {1, 3, 5, 10, 15, 20, 25, 30, 45, 60, 0};
+static const uint8_t N_QUICK_TIMERS = sizeof(QUICK_TIMERS) / sizeof(uint8_t);
+
 static void clock_indicate(watch_indicator_t indicator, bool on) {
     if (on) {
         watch_set_indicator(indicator);
@@ -83,6 +86,75 @@ static void clock_indicate_low_available_power(stock_clock_state_t *state) {
     }
 }
 
+static void clock_display_quick_timer(stock_clock_state_t *state, watch_date_time_t current, bool blink) {
+    char buf[2 + 1];
+
+    if (state->timer_active) {
+        uint32_t now = movement_get_utc_timestamp();
+        uint32_t remaining = (state->timer_target_timestamp - now);
+
+        if (blink && remaining > 30 && current.unit.second % 2) {
+            watch_display_text(WATCH_POSITION_SECONDS, "  ");
+        } else {
+            // display remaining seconds during the last 30 seconds, otherwise display minutes
+            if (remaining > 30) {
+                remaining = (remaining + 30) / 60;
+            }
+            snprintf(buf, sizeof(buf), "%2d", remaining);
+            watch_display_text(WATCH_POSITION_SECONDS, buf);
+        }
+    } else  {
+        watch_display_character_lp_seconds('0' + current.unit.second / 10, 8);
+        watch_display_character_lp_seconds('0' + current.unit.second % 10, 9);
+    }
+}
+
+static void clock_disable_quick_timer(stock_clock_state_t *state) {
+    state->timer_active = false;
+    state->timer_target_timestamp = 0;
+    movement_cancel_background_task_for_face(state->watch_face_index);
+    if (movement_button_should_sound()) {
+        movement_play_note(BUZZER_NOTE_C8, 50);
+    }
+}
+
+static void clock_enable_quick_timer(stock_clock_state_t *state, uint32_t target_timestamp) {
+    state->timer_active = true;
+    state->timer_target_timestamp = target_timestamp;
+    watch_date_time_t target_date_time = watch_utility_date_time_from_unix_time(state->timer_target_timestamp, 0);
+    movement_schedule_background_task_for_face(state->watch_face_index, target_date_time);
+    if (movement_button_should_sound()) {
+        movement_play_note(BUZZER_NOTE_C7, 50);
+    }
+}
+
+static void clock_increase_quick_timer(stock_clock_state_t *state, watch_date_time_t current) {
+    uint32_t now = movement_get_utc_timestamp();
+
+    uint8_t target_quick_timer;
+
+    if (state->timer_target_timestamp == 0) {
+        // We are first enabling a quick timer
+        target_quick_timer = QUICK_TIMERS[0];
+    } else {
+        // Find the next preset given the currently running timer
+        uint32_t remaining_minutes = (state->timer_target_timestamp - now + 30) / 60;
+
+        for (uint8_t i = 0; i < N_QUICK_TIMERS; i++) {
+            target_quick_timer = QUICK_TIMERS[i];
+            if (target_quick_timer > remaining_minutes) {
+                break;
+            }
+        }
+    }
+
+    if (target_quick_timer == 0) {
+        clock_disable_quick_timer(state);
+    } else {
+        clock_enable_quick_timer(state, now + target_quick_timer * 60);
+    }
+}
+
 static watch_date_time_t clock_24h_to_12h(watch_date_time_t date_time) {
     date_time.unit.hour %= 12;
 
@@ -106,7 +178,7 @@ static void clock_check_battery_periodically(stock_clock_state_t *state, watch_d
     clock_indicate_low_available_power(state);
 }
 
-static void clock_display_all(watch_date_time_t date_time) {
+static void clock_display_all(watch_date_time_t date_time, bool skip_seconds) {
     char buf[8 + 1];
 
     snprintf(
@@ -119,17 +191,23 @@ static void clock_display_all(watch_date_time_t date_time) {
         date_time.unit.second
     );
 
+    if (skip_seconds) {
+        buf[6] = '\0';
+    }
+
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, watch_utility_get_long_weekday(date_time), watch_utility_get_weekday(date_time));
     watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
     watch_display_text(WATCH_POSITION_BOTTOM, buf + 2);
 }
 
-static bool clock_display_some(watch_date_time_t current, watch_date_time_t previous) {
+static bool clock_display_some(watch_date_time_t current, watch_date_time_t previous, bool skip_seconds) {
     if ((current.reg >> 6) == (previous.reg >> 6)) {
         // everything before seconds is the same, don't waste cycles setting those segments.
 
-        watch_display_character_lp_seconds('0' + current.unit.second / 10, 8);
-        watch_display_character_lp_seconds('0' + current.unit.second % 10, 9);
+        if (!skip_seconds) {
+            watch_display_character_lp_seconds('0' + current.unit.second / 10, 8);
+            watch_display_character_lp_seconds('0' + current.unit.second % 10, 9);
+        }
 
         return true;
 
@@ -147,7 +225,10 @@ static bool clock_display_some(watch_date_time_t current, watch_date_time_t prev
         );
 
         watch_display_text(WATCH_POSITION_MINUTES, buf);
-        watch_display_text(WATCH_POSITION_SECONDS, buf + 2);
+
+        if (!skip_seconds) {
+            watch_display_text(WATCH_POSITION_SECONDS, buf + 2);
+        }
 
         return true;
 
@@ -158,12 +239,16 @@ static bool clock_display_some(watch_date_time_t current, watch_date_time_t prev
 }
 
 static void clock_display_clock(stock_clock_state_t *state, watch_date_time_t current) {
-    if (!clock_display_some(current, state->date_time.previous)) {
+    if (!clock_display_some(current, state->date_time.previous, state->timer_active)) {
         if (movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_12H) {
             clock_indicate_pm(current);
             current = clock_24h_to_12h(current);
         }
-        clock_display_all(current);
+        clock_display_all(current, state->timer_active);
+    }
+
+    if (state->timer_active) {
+        clock_display_quick_timer(state, current, true);
     }
 }
 
@@ -213,6 +298,8 @@ void stock_clock_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         *context_ptr = malloc(sizeof(stock_clock_state_t));
         stock_clock_state_t *state = (stock_clock_state_t *) *context_ptr;
         state->watch_face_index = watch_face_index;
+        state->timer_active = false;
+        state->timer_target_timestamp = 0;
     }
 }
 
@@ -240,13 +327,22 @@ bool stock_clock_face_loop(movement_event_t event, void *context) {
             clock_start_tick_tock_animation();
             clock_display_low_energy(movement_get_local_date_time());
             break;
+        case EVENT_ALARM_BUTTON_DOWN:
+            if (state->timer_active) {
+                current = movement_get_local_date_time();
+                clock_increase_quick_timer(state, current);
+                clock_display_quick_timer(state, current, false);
+            }
+            break;
         case EVENT_ALARM_LONG_PRESS:
-            movement_set_clock_mode_24h(((movement_clock_mode_24h() + 1) % MOVEMENT_NUM_CLOCK_MODES));
-            clock_indicate_24h();
-            clock_indicate(WATCH_INDICATOR_PM, false);
-            // ensure we re-render fully
-            state->date_time.previous.reg = 0xFFFFFFFF;
-            // intentional fallthrough to redraw
+            current = movement_get_local_date_time();
+            if (state->timer_active) {
+                clock_disable_quick_timer(state);
+            } else {
+                clock_increase_quick_timer(state, current);
+            }
+            clock_display_quick_timer(state, current, false);
+            break;
         case EVENT_TICK:
         case EVENT_ACTIVATE:
             current = movement_get_local_date_time();
@@ -258,7 +354,12 @@ bool stock_clock_face_loop(movement_event_t event, void *context) {
             state->date_time.previous = current;
 
             break;
-
+        case EVENT_BACKGROUND_TASK:
+            movement_play_alarm();
+            current = movement_get_local_date_time();
+            clock_disable_quick_timer(state);
+            clock_display_quick_timer(state, current, false);
+            break;
         default:
             return movement_default_loop_handler(event);
     }
