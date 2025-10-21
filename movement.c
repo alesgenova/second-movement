@@ -1245,7 +1245,9 @@ bool movement_enable_step_count_multiple_attempts(uint8_t max_tries, bool force_
                 return true;
             }
         }
-        delay_ms(10);
+        if (i < max_tries - 1) {
+            delay_ms(10);
+        }
     }
     return false;
 }
@@ -1668,7 +1670,9 @@ void app_setup(void) {
                         break;
                     }
                 }
-                delay_ms(10);
+                if (i < max_tries - 1) {
+                    delay_ms(10);
+                }
             }
             if (!movement_state.has_lis2dux) {
                 watch_disable_i2c();
