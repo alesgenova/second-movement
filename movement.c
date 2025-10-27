@@ -95,6 +95,7 @@ typedef struct {
     volatile bool is_buzzing;
     volatile uint8_t pending_sequence_priority;
     volatile bool schedule_next_comp;
+    volatile bool has_pending_accelerometer;
 
     // button tracking for long press
     movement_button_t mode_button;
@@ -276,6 +277,24 @@ static void _movement_renew_top_of_minute_alarm(void) {
     movement_volatile_state.minute_counter += watch_rtc_get_ticks_per_minute();
     watch_rtc_register_comp_callback_no_schedule(cb_minute_alarm_fired, movement_volatile_state.minute_counter, MINUTE_TIMEOUT);
     movement_volatile_state.schedule_next_comp = true;
+}
+
+static uint32_t _movement_get_accelerometer_events() {
+    uint32_t accelerometer_events = 0;
+
+    uint8_t int_src = lis2dw_get_interrupt_source();
+
+    if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
+        accelerometer_events |= 1 << EVENT_DOUBLE_TAP;
+        printf("Double tap!\n");
+    }
+
+    if (int_src & LIS2DW_REG_ALL_INT_SRC_SINGLE_TAP) {
+        accelerometer_events |= 1 << EVENT_SINGLE_TAP;
+        printf("Single tap!\n");
+    }
+
+    return accelerometer_events;
 }
 
 static void _movement_handle_button_presses(uint32_t pending_events) {
@@ -904,6 +923,7 @@ void app_init(void) {
     movement_volatile_state.enter_sleep_mode = false;
     movement_volatile_state.exit_sleep_mode = false;
     movement_volatile_state.has_pending_sequence = false;
+    movement_volatile_state.has_pending_accelerometer = false;
     movement_volatile_state.is_sleeping = false;
 
     movement_volatile_state.is_buzzing = false;
@@ -1215,6 +1235,11 @@ bool app_loop(void) {
         }
     }
 
+    if (movement_volatile_state.has_pending_accelerometer) {
+        movement_volatile_state.has_pending_accelerometer = false;
+        pending_events |= _movement_get_accelerometer_events();
+    }
+
     // handle any button up/down events that occurred, e.g. schedule longpress timeouts, reset inactivity, etc.
     _movement_handle_button_presses(pending_events);
 
@@ -1462,16 +1487,7 @@ void cb_tick(void) {
 }
 
 void cb_accelerometer_event(void) {
-    uint8_t int_src = lis2dw_get_interrupt_source();
-
-    if (int_src & LIS2DW_REG_ALL_INT_SRC_DOUBLE_TAP) {
-        movement_volatile_state.pending_events |= 1 << EVENT_DOUBLE_TAP;
-        printf("Double tap!\n");
-    }
-    if (int_src & LIS2DW_REG_ALL_INT_SRC_SINGLE_TAP) {
-        movement_volatile_state.pending_events |= 1 << EVENT_SINGLE_TAP;
-        printf("Single tap!\n");
-    }
+    movement_volatile_state.has_pending_accelerometer = true;
 }
 
 void cb_accelerometer_wake(void) {
