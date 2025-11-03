@@ -35,18 +35,23 @@
 /*
  * STOCK CLOCK FACE
  *
- * This is almost identical to clock_face, but it has two significant differences.
  * - it delegates the playing of the hourly chime to another face, merely displaying the bell indicator
  * - it toggles between 12/24H time display when pressing the alarm button
- * 
- * These changes effectively make this face identical to the stock F91W clock face, hence the name.
+ * - Short pressing the alarm button immediately starts the fast stopwatch. When resetting the stopwatch, will return to clock.
+ * - Long pressing the alarm button enters quick timer mode, immediately starting a timer.
+ *   Top row shows on the left the length of the timer in minutes, on the right minutes remaining, seconds shows seconds remaining.
+ *   Pressing the alarm switches between timer lengths of 1, 3, 5, 10, 15, 20, 25, 30, 45, 60 minutes. When switching,
+ *   the timer does not reset, only the length changes. Long pressing the light button resets the timer.
+ *   Long pressing alarm switches out of timer mode.
  *
  */
 
 #include "movement.h"
 
-typedef struct {
-    struct {
+typedef struct
+{
+    struct
+    {
         watch_date_time_t previous;
     } date_time;
     uint8_t last_battery_check;
@@ -54,19 +59,34 @@ typedef struct {
     bool battery_low;
     bool timer_active;
     uint32_t timer_target_timestamp;
+
+    // Stopwatch fields
+    bool stopwatch_mode;              // true when in stopwatch mode, false when in clock mode
+    rtc_counter_t alarm_down_counter; // rtc counter when alarm button was pressed down
+    rtc_counter_t start_counter;      // rtc counter when the stopwatch was started
+    rtc_counter_t lap_counter;        // rtc counter when the stopwatch was lapped
+    rtc_counter_t stop_counter;       // rtc counter when the stopwatch was stopped
+    uint8_t stopwatch_status;         // the status the stopwatch is in (idle, running, stopped)
+    bool slow_refresh;                // update the display slowly (same 128Hz timekeeping accuracy)
+    struct
+    {
+        rtc_counter_t seconds;
+        rtc_counter_t minutes;
+        rtc_counter_t hours;
+    } old_display; // the digits currently being displayed on screen
 } stock_clock_state_t;
 
-void stock_clock_face_setup(uint8_t watch_face_index, void ** context_ptr);
+void stock_clock_face_setup(uint8_t watch_face_index, void **context_ptr);
 void stock_clock_face_activate(void *context);
 bool stock_clock_face_loop(movement_event_t event, void *context);
 void stock_clock_face_resign(void *context);
 
-#define stock_clock_face ((const watch_face_t) { \
-    stock_clock_face_setup, \
-    stock_clock_face_activate, \
-    stock_clock_face_loop, \
-    stock_clock_face_resign, \
-    NULL, \
+#define stock_clock_face ((const watch_face_t){ \
+    stock_clock_face_setup,                     \
+    stock_clock_face_activate,                  \
+    stock_clock_face_loop,                      \
+    stock_clock_face_resign,                    \
+    NULL,                                       \
 })
 
 #endif // CLOCK_FACE_H_
