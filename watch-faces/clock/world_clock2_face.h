@@ -102,22 +102,29 @@
 
 #include "movement.h"
 #include "zones.h"
+#include "movement_location_data.h"
+
+#define NUM_REGIONS 6
+#define MAX_LOCATIONS 160
 
 typedef enum
 {
     WORLD_CLOCK2_MODE_CLOCK,
-    WORLD_CLOCK2_MODE_SETTINGS
+    WORLD_CLOCK2_MODE_SETTINGS_REGION,
+    WORLD_CLOCK2_MODE_SETTINGS_CITY
 } world_clock2_mode_t;
 
 typedef struct
 {
     bool selected;
-} world_clock2_zone_t;
+} world_clock2_location_t;
 
 typedef struct
 {
-    world_clock2_zone_t zones[NUM_ZONE_NAMES];
-    uint8_t current_zone;
+    world_clock2_location_t locations[MAX_LOCATIONS];
+    uint16_t current_location;
+    uint8_t current_region;
+    uint8_t last_location_per_region[NUM_REGIONS]; // Remember last location visited in each region
     world_clock2_mode_t current_mode;
     uint32_t previous_date_time;
     uint8_t show_zone_name;
