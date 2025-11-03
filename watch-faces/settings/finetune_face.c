@@ -119,7 +119,7 @@ static void finetune_update_correction_time(void) {
     // Remember when we last corrected time
     nanosec_state.last_correction_time = movement_get_utc_timestamp();
     nanosec_save();
-    movement_move_to_face(0); // Go to main face after saving settings
+    movement_move_to_page(0); // Go to main face after saving settings
 }
 
 bool finetune_face_loop(movement_event_t event, void *context) {
@@ -149,11 +149,14 @@ bool finetune_face_loop(movement_event_t event, void *context) {
 
             finetune_update_display();
             break;
+        
+        case EVENT_MODE_BUTTON_DOWN:
+            break;
 
         case EVENT_MODE_BUTTON_UP:
             // Only allow for fast exit when correction is 0!!!
             if (finetune_page == 0 && total_adjustment == 0) {
-                movement_move_to_next_face();
+                movement_move_to_next_page();
             } else {
                 finetune_page = (finetune_page + 1) % 3;
                 finetune_update_display();
@@ -203,7 +206,7 @@ bool finetune_face_loop(movement_event_t event, void *context) {
             // Your watch face will receive this event after a period of inactivity. If it makes sense to resign,
             // you may uncomment this line to move back to the first watch face in the list:
             if (total_adjustment == 0) // Timeout only works if no adjustment was made
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             break;
 
         case EVENT_LOW_ENERGY_UPDATE:

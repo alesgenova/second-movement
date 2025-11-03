@@ -168,7 +168,7 @@ bool ish_face_loop(movement_event_t event, void *context) {
             }
             break;
         }
-        case EVENT_ALARM_BUTTON_UP: {
+        case EVENT_ALARM_BUTTON_DOWN: {
             // Cycle through vagueness levels 1→2→3→1
             state->vagueness_level++;
             if (state->vagueness_level > ISH_LEVEL_MAX) state->vagueness_level = ISH_LEVEL_MIN;

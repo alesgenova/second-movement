@@ -339,10 +339,15 @@ bool timer_face_loop(movement_event_t event, void *context) {
         case EVENT_ALARM_LONG_UP:
             _abort_quick_cycle(state);
             break;
+        case EVENT_MODE_BUTTON_DOWN:
+            break;
+        case EVENT_MODE_BUTTON_UP:
+            movement_move_to_next_page();
+            break;
         case EVENT_MODE_LONG_PRESS:
         case EVENT_TIMEOUT:
             _abort_quick_cycle(state);
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             movement_default_loop_handler(event);

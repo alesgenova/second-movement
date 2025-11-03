@@ -280,10 +280,12 @@ bool nanosec_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TICK:
             break;
+        case EVENT_MODE_BUTTON_DOWN:
+            break;
         case EVENT_MODE_BUTTON_UP:
             if (nanosec_screen == 0) { // we can exit face only on the 0th page
                 nanosec_ui_save();
-                movement_move_to_next_face();
+                movement_move_to_next_page();
             } else {
                 nanosec_next_edit_screen();
             }
@@ -316,7 +318,7 @@ bool nanosec_face_loop(movement_event_t event, void *context) {
         case EVENT_TIMEOUT:
             // Your watch face will receive this event after a period of inactivity. If it makes sense to resign,
             // you may uncomment this line to move back to the first watch face in the list:
-            // movement_move_to_face(0);
+            // movement_move_to_page(0);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
             // If you did not resign in EVENT_TIMEOUT, you can use this event to update the display once a minute.

@@ -43,7 +43,7 @@ bool character_set_face_loop(movement_event_t event, void *context) {
     char *c = (char *)context;
     char buf[11];
     switch (event.event_type) {
-        case EVENT_ALARM_BUTTON_UP:
+        case EVENT_ALARM_BUTTON_DOWN:
             *c = (*c) + 1;
             if (*c & 0x80) *c = ' ';
             // fall through
@@ -54,7 +54,7 @@ bool character_set_face_loop(movement_event_t event, void *context) {
             watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, buf, buf);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             movement_default_loop_handler(event);

@@ -473,7 +473,7 @@ static void _handle_mode_still_pressed(periodic_table_state_t *state, bool shoul
             switch (state->mode)
             {
             case SCREEN_TITLE:
-                movement_move_to_face(0);
+                movement_move_to_page(0);
                 return;
             case SCREEN_ELEMENT:
                 state->mode = SCREEN_TITLE;
@@ -546,8 +546,10 @@ bool periodic_table_face_loop(movement_event_t event, void *context)
             movement_illuminate_led();
         }
         break;
+    case EVENT_MODE_BUTTON_DOWN:
+        break;
     case EVENT_MODE_BUTTON_UP:
-        if (state->mode == SCREEN_TITLE) movement_move_to_next_face();
+        if (state->mode == SCREEN_TITLE) movement_move_to_next_page();
         else {
             state->mode = (state->mode + 1) % SCREENS_COUNT;
             if (state->mode == SCREEN_TITLE)
