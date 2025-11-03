@@ -161,7 +161,6 @@ endif
 include watch-faces.mk
 
 SRCS += \
-  ./movement_location_data.c \
   ./movement.c \
   ./movement_pin_service.c \
   ./movement_custom_signal_tunes.c \
