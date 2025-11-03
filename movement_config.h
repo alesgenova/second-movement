@@ -30,18 +30,17 @@
 const watch_face_t watch_faces[] = {
     // primary faces
     stock_clock_face,
-    alarm_face,
+    world_clock2_face,
+    sunrise_sunset_face,
+    advanced_alarm_face,
     fast_stopwatch_face,
     countdown_face,
-    sunrise_sunset_face,
     moon_phase_face,
 
     // secondary faces
-    totp_lfs_face,
+    interval_face,
     tunes_face,
     probability_face,
-    wordle_face,
-    counter_face,
 
     // tertiary faces
     settings_face,
@@ -63,7 +62,7 @@ const watch_face_t watch_faces[] = {
  * Some folks also like to use this to hide the preferences and time set faces from the normal rotation.
  * If you don't want any faces to be excluded, set this to 0 and a long Mode press will have no effect.
  */
-#define MOVEMENT_SECONDARY_FACE_INDEX (MOVEMENT_NUM_FACES - 14)
+#define MOVEMENT_SECONDARY_FACE_INDEX (MOVEMENT_NUM_FACES - 9 - 3)
 #define MOVEMENT_TERTIARY_FACE_INDEX (MOVEMENT_NUM_FACES - 9)
 
 /* Determines the intensity of the led colors
@@ -117,7 +116,7 @@ const watch_face_t watch_faces[] = {
 /* Optionally debounce button presses (disable by default).
  * A value of 4 is a good starting point if you have issues
  * with multiple button presses firing.
-*/
+ */
 #define MOVEMENT_DEBOUNCE_TICKS 0
 
 #endif // MOVEMENT_CONFIG_H_

@@ -75,6 +75,7 @@
 #include "wareki_face.h"
 #include "deadline_face.h"
 #include "wordle_face.h"
+#include "world_clock2_face.h"
 #include "rtccount_face.h"
 #include "tunes_face.h"
 #include "page_ordering_face.h"
