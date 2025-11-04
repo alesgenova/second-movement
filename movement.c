@@ -1609,19 +1609,41 @@ void app_setup(void) {
         watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
 
 #ifdef I2C_SERCOM
-        static bool lis2dw_checked = false;
-        if (!lis2dw_checked) {
+        static bool accessory_port_checked = false;
+        if (!accessory_port_checked) {
+            bool device_found = false;
+            movement_state.has_lis2dw = false;
+            movement_state.has_lis2dux = false;
             watch_enable_i2c();
-            if (lis2dw_begin()) {
-                movement_state.has_lis2dw = true;
-            } else {
-                movement_state.has_lis2dw = false;
-                //watch_disable_i2c(); // I2C gets disabled after the LIS2DUX check
+            movement_state.has_lis2dw = lis2dw_begin();
+            device_found |= movement_state.has_lis2dw;
+            if (!device_found) {
+                uint8_t id;
+                const uint8_t max_tries = 3;
+                
+                for (uint8_t i = 0; i < max_tries; i++)
+                {  // We've seen the LIS2DUX require multiple reads at times to see the ID correctly
+                    if (lis2dux12_device_id_get(&dev_ctx, &id) == 0) {
+                        if (id == LIS2DUX12_ID) {
+                            movement_state.has_lis2dux = true;
+                            break;
+                        }
+                    }
+                    if (i < max_tries - 1) {
+                        delay_ms(10);
+                    }
+                }
+                device_found |= movement_state.has_lis2dux;
             }
-            lis2dw_checked = true;
+            if (!device_found) {
+                watch_disable_i2c();
+            }
+            accessory_port_checked = true;
         } else if (movement_state.has_lis2dw) {
             watch_enable_i2c();
             lis2dw_begin();
+        } else if (movement_state.has_lis2dux) {
+            watch_enable_i2c();
         }
 
         if (movement_state.has_lis2dw) {
@@ -1665,34 +1687,7 @@ void app_setup(void) {
             // movement_set_accelerometer_background_rate with another rate like LIS2DW_DATA_RATE_LOWEST or LIS2DW_DATA_RATE_25_HZ.
             lis2dw_set_data_rate(movement_state.accelerometer_background_rate);
         }
-
-        static bool lis2dux_checked = false;
-        if (movement_state.has_lis2dw) lis2dux_checked = true;  // We only have one port, they can't both be connected
-        if (!lis2dux_checked) {
-            uint8_t id;
-            watch_enable_i2c();
-            const uint8_t max_tries = 3;
-            movement_state.has_lis2dux = false;
-            for (uint8_t i = 0; i < max_tries; i++)
-            {
-                if (lis2dux12_device_id_get(&dev_ctx, &id) == 0) {
-                    if (id == LIS2DUX12_ID) {
-                        movement_state.has_lis2dux = true;
-                        break;
-                    }
-                }
-                if (i < max_tries - 1) {
-                    delay_ms(10);
-                }
-            }
-            if (!movement_state.has_lis2dux) {
-                watch_disable_i2c();
-            }
-            lis2dux_checked = true;
-        } else if (movement_state.has_lis2dux) {
-            watch_enable_i2c();
-        }
-        if (movement_state.has_lis2dux) {
+        else if (movement_state.has_lis2dux) {
             lis2dux12_exit_deep_power_down(&dev_ctx);
             lis2dux12_init_set(&dev_ctx, LIS2DUX12_RESET);
             movement_set_accelerometer_background_rate(LIS2DUX12_OFF);
