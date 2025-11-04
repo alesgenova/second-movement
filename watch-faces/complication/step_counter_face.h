@@ -44,6 +44,7 @@ typedef struct {
     uint16_t sec_inactivity : 14;
     uint16_t can_sleep : 1;
     uint16_t sensor_seen : 1;
+    uint8_t sec_before_starting;
     uint8_t display_index;  // the index we are displaying on screen
     int32_t data_points;    // the absolute number of data points logged
     step_counter_face_data_point_t data[STEP_COUNTER_NUM_DATA_POINTS];

@@ -27,6 +27,7 @@
 #include "step_counter_face.h"
 
 #define STEP_COUNTER_MINUTES_NO_ACTIVITY_RESIGN 5
+#define STEP_COUNTER_MINUTES_SEC_BEFORE_START 2
 #define STEP_COUNTER_MAX_STEPS_DISPLAY 999999
 
 // distant future for background task: January 1, 2083
@@ -93,6 +94,16 @@ static void allow_sleeping(bool sleeping_is_wanted, step_counter_state_t *logger
     }
 }
 
+static void enable_sensor(step_counter_state_t *logger_state) {
+    logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
+    if (logger_state->sensor_seen) {
+        logger_state->can_sleep = false;
+        movement_schedule_background_task(distant_future);
+        movement_update_step_count_lis2dux();
+    }
+    _step_counter_face_logging_update_display(logger_state);
+}
+
 void step_counter_face_setup(uint8_t watch_face_index, void ** context_ptr) {
     (void) watch_face_index;
     if (*context_ptr == NULL) {
@@ -148,14 +159,12 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 // There can be a delay in showing the screen when turning on the step counter,
                 // So if it's off, display stale step counts that'll then get updated
                 _step_counter_face_logging_update_display(logger_state);
+                logger_state->sec_before_starting = STEP_COUNTER_MINUTES_SEC_BEFORE_START;
             }
-            logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
-            if (logger_state->sensor_seen) {
-                logger_state->can_sleep = false;
-                movement_schedule_background_task(distant_future);
-                movement_update_step_count_lis2dux();
+            else {
+                enable_sensor(logger_state);
+                logger_state->sec_before_starting = 0;
             }
-            _step_counter_face_logging_update_display(logger_state);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
             if(displaying_curr_step_count) {
@@ -163,6 +172,15 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             break;
         case EVENT_TICK:
+            // This makes it so if the we're just scrolling through faces, we don't immedietly turn
+            // on the step counter only to turn it back off.
+            if (logger_state->sec_before_starting > 0) {
+                logger_state->sec_before_starting--;
+                if (logger_state->sec_before_starting == 0) {
+                    enable_sensor(logger_state);
+                }
+                break;
+            }
             if(displaying_curr_step_count) {
                 step_count = get_step_count();
                 if (step_count != logger_state->step_count_prev) {
