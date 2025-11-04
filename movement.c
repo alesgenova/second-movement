@@ -1048,6 +1048,27 @@ bool movement_has_lis2dux(void) {
     return movement_state.has_lis2dux;
 }
 
+#ifdef I2C_SERCOM
+static bool _movement_lis2dux_verify_first_time(void) {
+    // We've seen the LIS2DUX require multiple reads at times to see the ID correctly
+    uint8_t id;
+    const uint8_t max_tries = 3;
+    
+    for (uint8_t i = 0; i < max_tries; i++)
+    {
+        if (lis2dux12_device_id_get(&dev_ctx, &id) == 0) {
+            if (id == LIS2DUX12_ID) {
+                return true;
+            }
+        }
+        if (i < max_tries - 1) {
+            delay_ms(10);
+        }
+    }
+    return false;
+}
+#endif
+
 bool movement_still_sees_accelerometer(void) {
 #ifdef I2C_SERCOM
     if (movement_state.has_lis2dw) {
@@ -1618,21 +1639,7 @@ void app_setup(void) {
             movement_state.has_lis2dw = lis2dw_begin();
             device_found |= movement_state.has_lis2dw;
             if (!device_found) {
-                uint8_t id;
-                const uint8_t max_tries = 3;
-                
-                for (uint8_t i = 0; i < max_tries; i++)
-                {  // We've seen the LIS2DUX require multiple reads at times to see the ID correctly
-                    if (lis2dux12_device_id_get(&dev_ctx, &id) == 0) {
-                        if (id == LIS2DUX12_ID) {
-                            movement_state.has_lis2dux = true;
-                            break;
-                        }
-                    }
-                    if (i < max_tries - 1) {
-                        delay_ms(10);
-                    }
-                }
+                movement_state.has_lis2dux = _movement_lis2dux_verify_first_time();
                 device_found |= movement_state.has_lis2dux;
             }
             if (!device_found) {
