@@ -159,13 +159,14 @@ static stmdev_ctx_t dev_ctx = {
     .write_reg = platform_write,
     .mdelay = platform_delay,
 };
-#endif
 
-static uint32_t _total_step_count = 0;
 static uint8_t _awake_state_lis2dw = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
 static uint16_t _step_count_prev_lis2dux = 0;  // When the LIS2DUX wakes, its step count resets. This value adds onto it if we get a lower step count
 static uint8_t _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND;
 
+#endif
+
+static uint32_t _total_step_count = 0;
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
 
@@ -496,9 +497,11 @@ void movement_request_tick_frequency(uint8_t freq) {
     // 0x01 (1 Hz) will have 7 leading zeros for PER7. 0x80 (128 Hz) will have no leading zeroes for PER0.
     uint8_t per_n = __builtin_clz(tmp);
 
+#ifdef I2C_SERCOM
     // While we try to count steps when the tick faster than 1 second, it may be inaccurate since
     // all 12-13 samples in the FIFO may not be read.
     _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND / movement_state.tick_frequency;
+#endif
     movement_state.tick_frequency = freq;
     movement_state.tick_pern = per_n;
 
@@ -1160,6 +1163,8 @@ void enable_disable_step_count_times(watch_date_time_t date_time) {
     } else if (!movement_state.counting_steps && in_count_step_hours && !movement_state.count_steps_keep_off) {
         movement_enable_step_count_multiple_attempts(3, false);
     }
+#else
+    (void)date_time;
 #endif
 }
 
@@ -1232,6 +1237,8 @@ bool movement_enable_step_count(bool force_enable) {
         movement_state.counting_steps = true;
         return true;
     }
+#else
+    (void)force_enable;
 #endif
     movement_state.counting_steps = false;
     return false;
@@ -1389,7 +1396,11 @@ uint32_t movement_get_step_count(void) {
 }
 
 uint8_t movement_get_lis2dw_awake(void) {
+#ifdef I2C_SERCOM
     return _awake_state_lis2dw;
+#else
+    return 0;
+#endif
 }
 
 float movement_get_temperature(void) {
@@ -2166,7 +2177,9 @@ void cb_accelerometer_lis2dux_event(void) {
 }
 
 void cb_accelerometer_wake_event(void) {
+#ifdef I2C_SERCOM
     _awake_state_lis2dw = !HAL_GPIO_A4_read();
+#endif
 }
 
 void cb_accelerometer_wake(void) {
