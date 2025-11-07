@@ -500,7 +500,7 @@ void movement_request_tick_frequency(uint8_t freq) {
 #ifdef I2C_SERCOM
     // While we try to count steps when the tick faster than 1 second, it may be inaccurate since
     // all 12-13 samples in the FIFO may not be read.
-    _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND / movement_state.tick_frequency;
+    _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND / freq;
 #endif
     movement_state.tick_frequency = freq;
     movement_state.tick_pern = per_n;
