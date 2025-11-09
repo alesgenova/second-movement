@@ -51,6 +51,31 @@
 #include "movement_custom_signal_tunes.h"
 #include "movement_custom_alarm_tunes.h"
 
+/* MOVEMENT_FACE_VALUE is a function just giving back the face name.
+ * This means it gives the C reference to the face.
+ */
+
+#define MOVEMENT_FACE_VALUE(face_name) face_name,
+#define PRIMARY_FACES   FOREACH_PRIMARY_FACE(MOVEMENT_FACE_VALUE)
+#define SECONDARY_FACES FOREACH_SECONDARY_FACE(MOVEMENT_FACE_VALUE)
+#define TERTIARY_FACES  FOREACH_TERTIARY_FACE(MOVEMENT_FACE_VALUE)
+
+/* If you get errors, make sure that / and , are correct above!!! */
+
+const watch_face_t watch_faces[] = {
+    PRIMARY_FACES
+    SECONDARY_FACES
+    TERTIARY_FACES
+};
+
+enum
+{
+    MOVEMENT_SECONDARY_FACE_INDEX = sizeof((watch_face_t[]){PRIMARY_FACES}) / sizeof(watch_face_t),
+    MOVEMENT_TERTIARY_FACE_INDEX = sizeof((watch_face_t[]){PRIMARY_FACES SECONDARY_FACES}) / sizeof(watch_face_t),
+    MOVEMENT_NUM_FACES = sizeof(watch_faces) / sizeof(watch_face_t),
+};
+
+
 #if __EMSCRIPTEN__
 #include <emscripten.h>
 void _wake_up_simulator(void);
@@ -1401,6 +1426,10 @@ static bool _switch_face(void) {
     movement_volatile_state.passthrough_events = _movement_button_events_mask;
 
     return can_sleep;
+}
+
+bool movement_led_stay_off() {
+    return movement_volatile_state.turn_led_off;
 }
 
 bool app_loop(void) {
