@@ -83,7 +83,7 @@ typedef union {
         // altimeter to display feet or meters as easily as it tells a thermometer to display degrees in F or C.
         bool clock_mode_24h : 1;            // indicates whether clock should use 12 or 24 hour mode.
         bool use_imperial_units : 1;        // indicates whether to use metric units (the default) or imperial.
-        
+
         bool button_volume : 1;             // 0 for soft beep, 1 for loud beep. If button_should_sound (above) is false, this is ignored.
     } bit;
     uint32_t reg;
@@ -429,3 +429,5 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold);
 // If the board has multiple temperature sensors, it will use the most accurate one available.
 // If the board has no temperature sensors, it will return 0xFFFFFFFF.
 float movement_get_temperature(void);
+
+bool movement_led_stay_off();
