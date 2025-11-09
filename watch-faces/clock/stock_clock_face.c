@@ -717,6 +717,8 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
     stock_clock_state_t *state = (stock_clock_state_t *)context;
     watch_date_time_t current;
 
+
+
     // Handle stopwatch mode
     if (state->stopwatch_mode)
     {
@@ -732,8 +734,15 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
             _draw_stopwatch_indicators(state, event, elapsed);
             _display_elapsed(state, elapsed);
             break;
-        case EVENT_ALARM_BUTTON_DOWN:
+        case EVENT_LIGHT_BUTTON_UP:
+        case EVENT_LIGHT_LONG_UP:
+            if (movement_led_stay_off()) {
+                movement_force_led_off();
+            }
+            break;
         case EVENT_LIGHT_BUTTON_DOWN:
+            movement_illuminate_led();
+        case EVENT_ALARM_BUTTON_DOWN:
         case EVENT_LIGHT_LONG_PRESS:
             _button_beep();
             // Fall through
@@ -772,6 +781,7 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
             current = movement_get_local_date_time();
             clock_increase_quick_timer(state, current);
             clock_display_quick_timer(state, current, false);
+            _button_beep();
         }
         else
         {
@@ -811,6 +821,7 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
             clock_increase_quick_timer(state, current);
         }
         clock_display_quick_timer(state, current, false);
+        _button_beep();
         break;
     case EVENT_LIGHT_LONG_PRESS:
         if (state->timer_active)
@@ -818,8 +829,17 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
             current = movement_get_local_date_time();
             clock_reset_quick_timer(state, current);
             clock_display_quick_timer(state, current, false);
+            _button_beep();
         }
         break;
+    case EVENT_LIGHT_BUTTON_UP:
+    case EVENT_LIGHT_LONG_UP:
+        if (movement_led_stay_off()) {
+            movement_force_led_off();
+        }
+        break;
+    case EVENT_LIGHT_BUTTON_DOWN:
+        movement_illuminate_led();
     case EVENT_TICK:
     case EVENT_ACTIVATE:
         current = movement_get_local_date_time();

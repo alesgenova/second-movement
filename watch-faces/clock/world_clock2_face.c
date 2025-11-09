@@ -50,7 +50,7 @@ typedef enum
 #define NAME_DISPLAY_TIME 2
 
 /* Pre-selected zones: Seattle, New York, UTC, Shanghai, Tokyo */
-#define SELECTED_ZONES {3, 8, 15, 32, 36, -1}
+#define SELECTED_ZONES {3, 5, 16, 21, -1}
 
 /* Modulo function */
 static inline unsigned int mod(int a, int b)
