@@ -302,11 +302,8 @@ typedef struct {
 
     // boolean set if accelerometer is detected
     bool has_lis2dw;
-
-    // boolean set if LIS2DUX accelerometer is detected
-    bool has_lis2dux;
     // data rate for background accelerometer sensing
-    uint8_t accelerometer_background_rate;
+    lis2dw_data_rate_t accelerometer_background_rate;
     // threshold for considering the wearer is in motion
     uint8_t accelerometer_motion_threshold;
 
@@ -421,13 +418,11 @@ bool movement_enable_tap_detection_if_available(void);
 bool movement_disable_tap_detection_if_available(void);
 
 bool movement_has_lis2dw(void);
-bool movement_has_lis2dux(void);
 bool movement_still_sees_accelerometer(void);
-uint8_t movement_get_accelerometer_id(void);
 
 // gets and sets the accelerometer data rate in the background
-uint8_t movement_get_accelerometer_background_rate(void);
-bool movement_set_accelerometer_background_rate(uint8_t new_rate);
+lis2dw_data_rate_t movement_get_accelerometer_background_rate(void);
+bool movement_set_accelerometer_background_rate(lis2dw_data_rate_t new_rate);
 
 // gets and sets the accelerometer motion threshold
 uint8_t movement_get_accelerometer_motion_threshold(void);
@@ -444,7 +439,6 @@ bool movement_step_count_keep_off(void);
 void movement_set_step_count_keep_on(bool keep_on);
 void movement_set_step_count_keep_off(bool keep_off);
 void movement_reset_step_count(void);
-void movement_update_step_count_lis2dux(void);
 uint32_t movement_get_step_count(void);
 uint8_t movement_get_lis2dw_awake(void);
 

@@ -99,7 +99,6 @@ static void enable_sensor(step_counter_state_t *logger_state) {
     if (logger_state->sensor_seen) {
         logger_state->can_sleep = false;
         movement_schedule_background_task(distant_future);
-        movement_update_step_count_lis2dux();
     }
     _step_counter_face_logging_update_display(logger_state);
 }
@@ -147,7 +146,7 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             }
             break;
         case EVENT_ACTIVATE:
-            if (!movement_has_lis2dw() && !movement_has_lis2dux()) {  // Skip this face if no accelerometer was seen on start-up
+            if (!movement_has_lis2dw()) {  // Skip this face if no accelerometer was seen on start-up
                 movement_move_to_next_face();
                 return false;
             }
