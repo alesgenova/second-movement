@@ -113,7 +113,8 @@ typedef struct {
 movement_volatile_state_t movement_volatile_state;
 
 static uint8_t _awake_state_lis2dw = 0;  // 0 = asleep, 1 = just woke up, 2 = awake
-static uint8_t _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND;
+static uint8_t _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT;
+
 static uint32_t _total_step_count = 0;
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
@@ -447,7 +448,7 @@ void movement_request_tick_frequency(uint8_t freq) {
     // While we try to count steps when the tick faster than 1 second, it may be inaccurate since
     // all 12-13 samples in the FIFO may not be read.
     if (movement_state.has_lis2dw) {
-        _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT_SECOND / freq;
+        _step_fifo_timeout_lis2dw = LIS2DW_FIFO_TIMEOUT / freq;
     }
     movement_state.tick_frequency = freq;
     movement_state.tick_pern = per_n;
