@@ -97,6 +97,8 @@ static void allow_sleeping(bool sleeping_is_wanted, step_counter_state_t *logger
 static void enable_sensor(step_counter_state_t *logger_state) {
     logger_state->sensor_seen = movement_enable_step_count_multiple_attempts(3, false);
     if (logger_state->sensor_seen) {
+        movement_set_step_count_keep_off(false);
+        movement_set_step_count_keep_on(true);
         logger_state->can_sleep = false;
         movement_schedule_background_task(distant_future);
     }
@@ -150,8 +152,6 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
                 movement_move_to_next_face();
                 return false;
             }
-            movement_set_step_count_keep_off(false);
-            movement_set_step_count_keep_on(true);
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 1;
             if (!movement_step_count_is_enabled()) {
