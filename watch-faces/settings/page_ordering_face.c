@@ -39,6 +39,16 @@ const char *watch_face_names[] = {
     FOREACH_TERTIARY_FACE(MOVEMENT_FACE_NAME)
 };
 
+
+#define CHAR3 (0)
+#define CHAR2 (1)
+const char *primary_section_name[] = { "PRI", "PR"} ;
+const char *secondary_section_name[] = { "SEC", "SC"} ;
+const char *tertiary_section_name[] = { "TER", "TR"} ;
+#define LEFT_BOUNDARY (0)
+#define RIGHT_BOUNDARY (1)
+const char *section_boundary[] = {"1     ", "     1"};
+
 typedef struct {
     uint8_t watch_face_index;
     uint8_t current_page_index;
@@ -67,7 +77,6 @@ void page_ordering_face_setup(uint8_t watch_face_index, void ** context_ptr) {
 }
 
 void page_ordering_face_activate(void *context) {
-    printf("Activating page ordering face\n");
     page_ordering_face_state_t *state = (page_ordering_face_state_t *)context;
     state->current_page_index = 0;
     state->touched = false;
@@ -160,33 +169,33 @@ uint8_t _next_section_end(uint8_t page_index) {
 
 
 static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
-    char buf[11], buf2[4];
+    char buf[11], buf2[4], *char3_name, *char2_name;
 
     uint8_t section = _section_num(state->current_page_index);
 
     if ( state->pending_secondary_face) {
-        snprintf(buf, 3, "SC");
-        snprintf(buf2, 4, "SEC");
+        char3_name = secondary_section_name[CHAR3];
+        char2_name = secondary_section_name[CHAR2];
     } else if ( state->pending_tertiary_face) {
-        snprintf(buf, 3, "TR");
-        snprintf(buf2, 4, "TER");
+        char3_name = tertiary_section_name[CHAR3];
+        char2_name = tertiary_section_name[CHAR2];
     } else switch (section) {
         case 0:
-            snprintf(buf, 3, "PR");
-            snprintf(buf2, 4, "PRI");
+            char3_name = primary_section_name[CHAR3];
+            char2_name = primary_section_name[CHAR2];
             break;
         case 1:
-            snprintf(buf, 3, "SC");
-            snprintf(buf2, 4, "SEC");
+            char3_name = secondary_section_name[CHAR3];
+            char2_name = secondary_section_name[CHAR2];
             break;
         case 2:
         default:
-            snprintf(buf, 3, "TR");
-            snprintf(buf2, 4, "TER");
+            char3_name = tertiary_section_name[CHAR3];
+            char2_name = tertiary_section_name[CHAR2];
             break;
     }
 
-    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf2, buf);
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, char3_name, char2_name);
 
     // Index of the face associated with the current page
     //snprintf(buf, 4, "%2.1u", state->current_page_index - _section_start(state->current_page_index)+1);
@@ -287,6 +296,8 @@ static void _turn_page(page_ordering_face_state_t *state, int8_t change) {
 }
 
 static void _movement_shift_pages(uint8_t from, uint8_t to, int8_t direction) {
+    /* It would be more efficient to remember 1st, shift everything, and put 1st back,
+     * but this way we use a movement library function. */
     if(direction < 0) {
         for(uint8_t i = from; i < to -1; i++)
             movement_swap_page_order(i, i + 1);
@@ -309,16 +320,16 @@ static void _page_ordering(page_ordering_face_state_t *state, int8_t change) {
         if (new_page_index == secondary_page) {
             movement_set_secondary_page( --secondary_page);
             new_page_index = secondary_page;
-            _animate_text(state, "    1", change);
+            _animate_text(state, section_boundary[RIGHT_BOUNDARY], change);
         } else if (new_page_index == tertiary_page) {
             movement_set_tertiary_page( --tertiary_page);
             new_page_index = tertiary_page;
-            _animate_text(state, "    1", change);
+            _animate_text(state, section_boundary[RIGHT_BOUNDARY], change);
         } else if (new_page_index == 0) {
             _movement_shift_pages(0, num_faces, +1);
             movement_set_secondary_page( ++secondary_page);
             movement_set_tertiary_page( ++tertiary_page);
-            _animate_text(state, "    1", change);
+            _animate_text(state, section_boundary[RIGHT_BOUNDARY], change);
         } else {
             _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
             movement_swap_page_order(state->current_page_index, new_page_index);
@@ -327,16 +338,16 @@ static void _page_ordering(page_ordering_face_state_t *state, int8_t change) {
         if (new_page_index == secondary_page-1) {
             movement_set_secondary_page( ++secondary_page);
             new_page_index = secondary_page-1;
-            _animate_text(state, "1    ", change);
+            _animate_text(state, section_boundary[LEFT_BOUNDARY], change);
         } else if (new_page_index == tertiary_page-1) {
             movement_set_tertiary_page( ++tertiary_page);
             new_page_index = tertiary_page-1;
-            _animate_text(state, "1    ", change);
+            _animate_text(state, section_boundary[LEFT_BOUNDARY], change);
         } else if (new_page_index == num_faces-1) {
             _movement_shift_pages(0, num_faces, -1);
             movement_set_secondary_page( ++secondary_page);
             movement_set_tertiary_page( ++tertiary_page);
-            _animate_text(state, "1    ", change);
+            _animate_text(state, section_boundary[LEFT_BOUNDARY], change);
         } else {
             _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
             movement_swap_page_order(state->current_page_index, new_page_index);
@@ -359,13 +370,9 @@ void _change_face_section(page_ordering_face_state_t *state) {
     dest_section_start = _next_section_start(state->current_page_index);
     dest_section_end = _next_section_end(state->current_page_index);
 
-    printf("Next section start: %u, end: %u\n", dest_section_start, dest_section_end);
-
     if( state->current_page_index >= dest_section_end) {
-        printf("Shorting from %u to %u\n", state->current_page_index, dest_section_end);
         _movement_shift_pages( dest_section_end, state->current_page_index+1, +1);
     } else {
-        printf("Shifting from %u to %u\n", state->current_page_index, dest_section_start);
         _movement_shift_pages(state->current_page_index, dest_section_start, -1);
     }
 
@@ -386,17 +393,6 @@ void _change_face_section(page_ordering_face_state_t *state) {
             _set_section_place(2, my_start + 1);
             state->current_page_index = dest_section_end ;
     }
-    // For debugging print location of sections and all pages
-    printf("=== After moving Section Debug Info ===\n");
-    printf("Secondary page: %u, Tertiary page: %u, Total faces: %u\n",
-           movement_get_secondary_page(), movement_get_tertiary_page(), movement_get_num_faces());
-    printf("All pages: ");
-    for(uint8_t i = 0; i < movement_get_num_faces(); i++) {
-        printf("Face %u, ", movement_page_to_face(i));
-    }
-    printf("\n");
-    printf("Section boundaries: %u %u\n", movement_get_secondary_page(), movement_get_tertiary_page());
-
 
     state->touched = true;
 }
@@ -423,7 +419,6 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             state->tick_tock = !state->tick_tock;
             break;
         case EVENT_ALARM_BUTTON_UP:
-            printf("Alarm button up\n");
             watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
             if( state->reordering)
                 _page_ordering(state, +1);
@@ -455,8 +450,6 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (state->reordering && (state->pending_secondary_face || state->pending_tertiary_face)) {
                 _page_ordering_commit_secondary_or_tertiary_face(state);
                 state->reordering = false;
-                printf("Sec: %u, Ter: %u\n",
-                       movement_get_secondary_page(), movement_get_tertiary_page());
             }
             break;
         case EVENT_LIGHT_BUTTON_UP:
