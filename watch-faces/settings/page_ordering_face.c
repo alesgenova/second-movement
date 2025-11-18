@@ -48,7 +48,13 @@ typedef struct {
     bool pending_secondary_face;
     bool pending_tertiary_face;
     bool protected;
+    bool animation;
+    char animation_text[8];
+    int8_t animation_step;
+    int8_t animation_direction;
 } page_ordering_face_state_t;
+
+static void _animate_text_step(page_ordering_face_state_t *state);
 
 void page_ordering_face_setup(uint8_t watch_face_index, void ** context_ptr) {
     (void) watch_face_index;
@@ -61,12 +67,12 @@ void page_ordering_face_setup(uint8_t watch_face_index, void ** context_ptr) {
 }
 
 void page_ordering_face_activate(void *context) {
+    printf("Activating page ordering face\n");
     page_ordering_face_state_t *state = (page_ordering_face_state_t *)context;
     state->current_page_index = 0;
     state->touched = false;
     state->tick_tock = true;
     state->reordering = false;
-    movement_request_tick_frequency(4);
 }
 
 int8_t _section_start(uint8_t page_index) {
@@ -158,8 +164,27 @@ static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
 
     uint8_t section = _section_num(state->current_page_index);
 
-    snprintf(buf, 3, "F%1.1u",1+section);
-    snprintf(buf2, 4, "Fo%1.1u", 1 + section);
+    if ( state->pending_secondary_face) {
+        snprintf(buf, 3, "SC");
+        snprintf(buf2, 4, "SEC");
+    } else if ( state->pending_tertiary_face) {
+        snprintf(buf, 3, "TR");
+        snprintf(buf2, 4, "TER");
+    } else switch (section) {
+        case 0:
+            snprintf(buf, 3, "PR");
+            snprintf(buf2, 4, "PRI");
+            break;
+        case 1:
+            snprintf(buf, 3, "SC");
+            snprintf(buf2, 4, "SEC");
+            break;
+        case 2:
+        default:
+            snprintf(buf, 3, "TR");
+            snprintf(buf2, 4, "TER");
+            break;
+    }
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf2, buf);
 
@@ -174,6 +199,11 @@ static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
         snprintf(buf, 3, "  ");
     }
     watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+
+    if (state->animation) {
+        _animate_text_step(state);
+        return;
+    }
 
     // Whether the page is enabled
     if (movement_is_page_enabled(state->current_page_index))
@@ -203,32 +233,42 @@ static void _page_ordering_face_toggle_page(page_ordering_face_state_t *state) {
     state->touched = true;
 }
 
-static void _animate_text(const char *text, int8_t direction) {
-    int8_t i, j;
+static void _animate_text_step(page_ordering_face_state_t *state) {
+    if (state->animation_step >= 7) {
+        state->animation = false;
+        return;
+    }
+
+    uint8_t i = state->animation_step < 0 ? 0 : state->animation_step;
+    int8_t j;
     char buf[8];
 
-    for(i = 0; i < 7; i++) {
-        for(j = 0; j < 6; j++) buf[j] = ' ';
+    for(j = 0; j < 6; j++) buf[j] = ' ';
 
-        if(direction > 0) {
-            /* Copy from position j to end of name to the left of the display */
-            for(j = 0; j <= 6 - i; j++) {
-                if(text[i + j] == '\0') break;
-                buf[j] = text[i + j];
-            }
-        } else {
-            /* copy from position 0 to end-i to the right of the display */
-            for(j = 6; j >= i; j--) {
-                if(text[j - i] == '\0') break;
-                buf[j] = text[j - i];
-            }
+    if(state->animation_direction > 0) {
+        /* Copy from position j to end of name to the left of the display */
+        for(j = 0; j <= 6 - i; j++) {
+            if(state->animation_text[i + j] == '\0') break;
+            buf[j] = state->animation_text[i + j];
         }
-        buf[6] = '\0';
-
-        watch_display_text(WATCH_POSITION_BOTTOM, buf);
-        delay_ms(100);
+    } else {
+        /* copy from position 0 to end-i to the right of the display */
+        for(j = 6; j >= i; j--) {
+            if(state->animation_text[j - i] == '\0') break;
+            buf[j] = state->animation_text[j - i];
+        }
     }
-    delay_ms(50);
+    buf[6] = '\0';
+
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    state->animation_step++;
+}
+
+static void _animate_text(page_ordering_face_state_t *state, const char *text, int8_t direction) {
+    strncpy(state->animation_text, text, 8);
+    state->animation = true;
+    state->animation_step = -1; // Wait one extra tick before scrolling (easier to read)
+    state->animation_direction = direction;
 }
 
 static void _turn_page(page_ordering_face_state_t *state, int8_t change) {
@@ -258,24 +298,50 @@ static void _movement_shift_pages(uint8_t from, uint8_t to, int8_t direction) {
 
 
 static void _page_ordering(page_ordering_face_state_t *state, int8_t change) {
+
     // Use uint16_t to avoid integer overflow if num_faces > 127;
-    uint16_t start, end;
-    uint16_t i;
+    uint16_t num_faces = movement_get_num_faces();
+    uint8_t secondary_page = movement_get_secondary_page();
+    uint8_t tertiary_page = movement_get_tertiary_page();
 
-    start = _section_start(state->current_page_index);
-    end = _section_end(state->current_page_index);
-    uint16_t num_faces = (uint16_t)(end - start);
-    uint16_t current_pos = state->current_page_index - start;
-    current_pos = ((int32_t)current_pos + change + num_faces) % num_faces;
-    uint16_t new_page_index = current_pos + start;
-
-    _animate_text(watch_face_names[movement_page_to_face(new_page_index)], change);
-    if( (state->current_page_index == start) && (change < 0))
-        _movement_shift_pages(start, end, change);
-    else if((state->current_page_index == end-1) && (change > 0))
-        _movement_shift_pages(start, end, change);
-    else
-        movement_swap_page_order(state->current_page_index, new_page_index);
+    uint16_t new_page_index = ((int32_t)state->current_page_index + change + num_faces) % num_faces;
+    if (change > 0) {
+        if (new_page_index == secondary_page) {
+            movement_set_secondary_page( --secondary_page);
+            new_page_index = secondary_page;
+            _animate_text(state, "    1", change);
+        } else if (new_page_index == tertiary_page) {
+            movement_set_tertiary_page( --tertiary_page);
+            new_page_index = tertiary_page;
+            _animate_text(state, "    1", change);
+        } else if (new_page_index == 0) {
+            _movement_shift_pages(0, num_faces, +1);
+            movement_set_secondary_page( ++secondary_page);
+            movement_set_tertiary_page( ++tertiary_page);
+            _animate_text(state, "    1", change);
+        } else {
+            _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
+            movement_swap_page_order(state->current_page_index, new_page_index);
+        }
+    } else {
+        if (new_page_index == secondary_page-1) {
+            movement_set_secondary_page( ++secondary_page);
+            new_page_index = secondary_page-1;
+            _animate_text(state, "1    ", change);
+        } else if (new_page_index == tertiary_page-1) {
+            movement_set_tertiary_page( ++tertiary_page);
+            new_page_index = tertiary_page-1;
+            _animate_text(state, "1    ", change);
+        } else if (new_page_index == num_faces-1) {
+            _movement_shift_pages(0, num_faces, -1);
+            movement_set_secondary_page( ++secondary_page);
+            movement_set_tertiary_page( ++tertiary_page);
+            _animate_text(state, "1    ", change);
+        } else {
+            _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
+            movement_swap_page_order(state->current_page_index, new_page_index);
+        }
+    }
     state->touched = true;
 
     state->current_page_index = new_page_index;
@@ -357,6 +423,7 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             state->tick_tock = !state->tick_tock;
             break;
         case EVENT_ALARM_BUTTON_UP:
+            printf("Alarm button up\n");
             watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
             if( state->reordering)
                 _page_ordering(state, +1);
@@ -364,8 +431,10 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
                 _turn_page(state, +1);
             break;
         case EVENT_LIGHT_LONG_PRESS:
-            if( state->reordering) {
-                _change_face_section(state);
+            if (state->reordering) {
+                state->pending_secondary_face = true;
+                state->pending_tertiary_face = false;
+                watch_buzzer_play_note(BUZZER_NOTE_C6, 40);
             } else {
                 if( !state->protected ) {
                     watch_buzzer_play_note(BUZZER_NOTE_C4, 50);
@@ -373,19 +442,21 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
                 } else {
                     watch_buzzer_play_note(BUZZER_NOTE_C3, 50);
                 }
-
             }
             break;
-        case EVENT_ALARM_REALLY_LONG_PRESS:
+        case EVENT_LIGHT_REALLY_LONG_PRESS:
             if (state->reordering) {
                 state->pending_secondary_face = false;
                 state->pending_tertiary_face = true;
-            }
+                watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
+        }
             break;
         case EVENT_LIGHT_LONG_UP:
             if (state->reordering && (state->pending_secondary_face || state->pending_tertiary_face)) {
                 _page_ordering_commit_secondary_or_tertiary_face(state);
                 state->reordering = false;
+                printf("Sec: %u, Ter: %u\n",
+                       movement_get_secondary_page(), movement_get_tertiary_page());
             }
             break;
         case EVENT_LIGHT_BUTTON_UP:
@@ -398,24 +469,37 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             else
                 _turn_page(state, -1);
             break;
+        case EVENT_ALARM_BUTTON_DOWN:
+            state->animation = false;
+            break;
         case EVENT_LIGHT_BUTTON_DOWN:
-            movement_illuminate_led();
+            state->animation = false;
             break;
         case EVENT_ALARM_LONG_PRESS:
             if (!state->reordering) {
                 watch_buzzer_play_note(BUZZER_NOTE_C7, 70);
+                movement_request_tick_frequency(4);
             } else {
                 watch_buzzer_play_note(BUZZER_NOTE_C5, 70);
+                movement_request_tick_frequency(1);
             }
             state->reordering = !state->reordering;
             break;
         case EVENT_TIMEOUT:
             movement_move_to_page(0);
             break;
+        case EVENT_MODE_BUTTON_DOWN:
+            if (state->touched) {
+                movement_move_to_page(0);
+            } else {
+                movement_default_loop_handler(event);
+            }
+            break;
         default:
             return movement_default_loop_handler(event);
     }
-   _page_ordering_face_update_lcd(state);
+
+    _page_ordering_face_update_lcd(state);
 
     return true;
 }
