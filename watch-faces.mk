@@ -10,6 +10,7 @@ SRCS += \
   ./watch-faces/complication/countdown_face.c \
   ./watch-faces/complication/stopwatch_face.c \
   ./watch-faces/complication/fast_stopwatch_face.c \
+  ./watch-faces/complication/fast_multilap_face.c \
   ./watch-faces/complication/sunrise_sunset_face.c \
   ./watch-faces/complication/moon_phase_face.c \
   ./watch-faces/complication/days_since_face.c \
