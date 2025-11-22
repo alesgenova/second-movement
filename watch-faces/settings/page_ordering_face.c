@@ -161,22 +161,36 @@ uint8_t _next_section_end(uint8_t page_index) {
 static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
     char buf[11], buf2[4];
 
-    uint8_t section = _section_num(state->current_page_index);
+    uint16_t loc_in_current_section;
 
-    switch (section) {
-        case 0:
-            snprintf(buf, 3, "PR");
-            snprintf(buf2, 4, "PRI");
-            break;
-        case 1:
-            snprintf(buf, 3, "SC");
-            snprintf(buf2, 4, "SEC");
-            break;
-        case 2:
-        default:
-            snprintf(buf, 3, "TR");
-            snprintf(buf2, 4, "TER");
-            break;
+    if ( state->pending_secondary_face) {
+        snprintf(buf, 3, "SC");
+        snprintf(buf2, 4, "SEC");
+        loc_in_current_section = 1;
+    } else if ( state->pending_tertiary_face) {
+        snprintf(buf, 3, "TR");
+        snprintf(buf2, 4, "TER");
+        loc_in_current_section = 1;
+    } else {
+        uint8_t section = _section_num(state->current_page_index);
+
+        switch (section) {
+            case 0:
+                snprintf(buf, 3, "PR");
+                snprintf(buf2, 4, "PRI");
+                break;
+            case 1:
+                snprintf(buf, 3, "SC");
+                snprintf(buf2, 4, "SEC");
+                break;
+            case 2:
+            default:
+                snprintf(buf, 3, "TR");
+                snprintf(buf2, 4, "TER");
+                break;
+        }
+
+        loc_in_current_section = state->current_page_index - _section_start(state->current_page_index)+1 ;
     }
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, buf2, buf);
@@ -184,8 +198,6 @@ static void _page_ordering_face_update_lcd(page_ordering_face_state_t *state) {
     // Index of the face associated with the current page
     //snprintf(buf, 4, "%2.1u", state->current_page_index - _section_start(state->current_page_index)+1);
 
-    // Current page
-    uint16_t loc_in_current_section = state->current_page_index - _section_start(state->current_page_index)+1 ;
     if (!state->reordering || state->tick_tock) {
         snprintf(buf, 4, "%2u", loc_in_current_section);
     } else {
@@ -292,75 +304,51 @@ static void _movement_shift_pages(uint8_t from, uint8_t to, int8_t direction) {
 
 static void _page_ordering(page_ordering_face_state_t *state, int8_t change) {
     // Use uint16_t to avoid integer overflow if num_faces > 127;
-    uint16_t start, end;
+    uint16_t num_faces = movement_get_num_faces();
+    uint8_t secondary_page = movement_get_secondary_page();
+    uint8_t tertiary_page = movement_get_tertiary_page();
 
-    start = 0;
-    end = movement_get_num_faces();
-
-    uint16_t num_faces = (uint16_t)(end - start);
-    uint16_t current_pos = state->current_page_index - start;
-    current_pos = ((int32_t)current_pos + change + num_faces) % num_faces;
-    uint16_t new_page_index = current_pos + start;
-
-    _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
-    movement_swap_page_order(state->current_page_index, new_page_index);
+    uint16_t new_page_index = ((int32_t)state->current_page_index + change + num_faces) % num_faces;
+    if (change > 0) {
+        if (new_page_index == secondary_page) {
+            movement_set_secondary_page( --secondary_page);
+            new_page_index = secondary_page;
+            _animate_text(state, "    1", change);
+        } else if (new_page_index == tertiary_page) {
+            movement_set_tertiary_page( --tertiary_page);
+            new_page_index = tertiary_page;
+            _animate_text(state, "    1", change);
+        } else if (new_page_index == 0) {
+            _movement_shift_pages(0, num_faces, +1);
+            movement_set_secondary_page( ++secondary_page);
+            movement_set_tertiary_page( ++tertiary_page);
+            _animate_text(state, "    1", change);
+        } else {
+            _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
+            movement_swap_page_order(state->current_page_index, new_page_index);
+        }
+    } else {
+        if (new_page_index == secondary_page-1) {
+            movement_set_secondary_page( ++secondary_page);
+            new_page_index = secondary_page-1;
+            _animate_text(state, "1    ", change);
+        } else if (new_page_index == tertiary_page-1) {
+            movement_set_tertiary_page( ++tertiary_page);
+            new_page_index = tertiary_page-1;
+            _animate_text(state, "1    ", change);
+        } else if (new_page_index == num_faces-1) {
+            _movement_shift_pages(0, num_faces, -1);
+            movement_set_secondary_page( ++secondary_page);
+            movement_set_tertiary_page( ++tertiary_page);
+            _animate_text(state, "1    ", change);
+        } else {
+            _animate_text(state, watch_face_names[movement_page_to_face(new_page_index)], change);
+            movement_swap_page_order(state->current_page_index, new_page_index);
+        }
+    }
     state->touched = true;
 
     state->current_page_index = new_page_index;
-}
-
-void _change_face_section(page_ordering_face_state_t *state) {
-
-    uint8_t my_start, my_end, new_start, new_end, my_section;
-    uint8_t dest_section_start, dest_section_end;
-
-    my_start = _section_start(state->current_page_index);
-    my_end = _section_end(state->current_page_index);
-    my_section = _section_num(state->current_page_index);
-
-    dest_section_start = _next_section_start(state->current_page_index);
-    dest_section_end = _next_section_end(state->current_page_index);
-
-    printf("Next section start: %u, end: %u\n", dest_section_start, dest_section_end);
-
-    if( state->current_page_index >= dest_section_end) {
-        printf("Shorting from %u to %u\n", state->current_page_index, dest_section_end);
-        _movement_shift_pages( dest_section_end, state->current_page_index+1, +1);
-    } else {
-        printf("Shifting from %u to %u\n", state->current_page_index, dest_section_start);
-        _movement_shift_pages(state->current_page_index, dest_section_start, -1);
-    }
-
-    switch(my_section) {
-        case 0:
-            // Move to secondary section
-            _set_section_place(1, dest_section_start - 1);
-            state->current_page_index = dest_section_start - 1;
-            break;
-        case 1:
-            // Move to tertiary section
-            _set_section_place(2, dest_section_start - 1);
-            state->current_page_index = dest_section_start - 1;
-            break;
-        case 2:
-            // Move to primary section
-            _set_section_place(1, dest_section_end + 1);
-            _set_section_place(2, my_start + 1);
-            state->current_page_index = dest_section_end ;
-    }
-    // For debugging print location of sections and all pages
-    printf("=== After moving Section Debug Info ===\n");
-    printf("Secondary page: %u, Tertiary page: %u, Total faces: %u\n",
-           movement_get_secondary_page(), movement_get_tertiary_page(), movement_get_num_faces());
-    printf("All pages: ");
-    for(uint8_t i = 0; i < movement_get_num_faces(); i++) {
-        printf("Face %u, ", movement_page_to_face(i));
-    }
-    printf("\n");
-    printf("Section boundaries: %u %u\n", movement_get_secondary_page(), movement_get_tertiary_page());
-
-
-    state->touched = true;
 }
 
 static void _page_ordering_commit_secondary_or_tertiary_face(page_ordering_face_state_t *state) {
@@ -395,6 +383,7 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (state->reordering) {
                 state->pending_secondary_face = true;
                 state->pending_tertiary_face = false;
+                watch_buzzer_play_note(BUZZER_NOTE_C6, 40);
             } else {
                 if( !state->protected ) {
                     watch_buzzer_play_note(BUZZER_NOTE_C4, 50);
@@ -408,6 +397,7 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (state->reordering) {
                 state->pending_secondary_face = false;
                 state->pending_tertiary_face = true;
+                watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
             }
             break;
         case EVENT_LIGHT_LONG_UP:
