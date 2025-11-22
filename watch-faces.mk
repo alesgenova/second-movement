@@ -2,6 +2,7 @@ SRCS += \
   ./watch-faces/clock/clock_face.c \
   ./watch-faces/clock/beats_face.c \
   ./watch-faces/clock/world_clock_face.c \
+  ./watch-faces/clock/stock_clock_face.c \
   ./watch-faces/clock/mars_time_face.c \
   ./watch-faces/clock/ish_face.c \
   ./watch-faces/complication/alarm_face.c \
@@ -32,6 +33,8 @@ SRCS += \
   ./watch-faces/settings/settings_face.c \
   ./watch-faces/settings/finetune_face.c \
   ./watch-faces/settings/nanosec_face.c \
+  ./watch-faces/settings/pin_face.c \
+  ./watch-faces/settings/page_ordering_face.c \
   ./watch-faces/io/chirpy_demo_face.c \
   ./watch-faces/io/irda_upload_face.c \
   ./watch-faces/complication/probability_face.c \
@@ -48,5 +51,7 @@ SRCS += \
   ./watch-faces/complication/simple_coin_flip_face.c \
   ./watch-faces/sensor/lis2dw_monitor_face.c \
   ./watch-faces/complication/wareki_face.c \
+  ./watch-faces/clock/world_clock2_face.c \
   ./watch-faces/complication/deadline_face.c \
+  ./watch-faces/settings/tunes_face.c \
 # New watch faces go above this line.

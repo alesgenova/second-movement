@@ -24,6 +24,7 @@
  */
 
 #define MOVEMENT_LONG_PRESS_TICKS 64
+#define MOVEMENT_REALLY_LONG_PRESS_TICKS 192
 
 #include <stdio.h>
 #include <string.h>
@@ -49,6 +50,7 @@
 #include "movement_config.h"
 
 #include "movement_custom_signal_tunes.h"
+#include "movement_custom_alarm_tunes.h"
 
 #if __EMSCRIPTEN__
 #include <emscripten.h>
@@ -58,14 +60,17 @@ void _wake_up_simulator(void);
 #endif
 
 volatile movement_state_t movement_state;
+uint16_t page_to_face[MOVEMENT_NUM_FACES]; // i-th el. is the face_index for page i
+uint16_t face_to_page[MOVEMENT_NUM_FACES]; // i-th el. is the page_index for face i
+bool watch_face_status[MOVEMENT_NUM_FACES]; // i-th el. indicates if face i is enabled
 void * watch_face_contexts[MOVEMENT_NUM_FACES];
 watch_date_time_t scheduled_tasks[MOVEMENT_NUM_FACES];
 const int32_t movement_le_inactivity_deadlines[8] = {INT_MAX, 600, 3600, 7200, 21600, 43200, 86400, 604800};
 const int16_t movement_timeout_inactivity_deadlines[4] = {60, 120, 300, 1800};
 
-const uint32_t _movement_mode_button_events_mask = 0b1111 << EVENT_MODE_BUTTON_DOWN;
-const uint32_t _movement_light_button_events_mask = 0b1111 << EVENT_LIGHT_BUTTON_DOWN;
-const uint32_t _movement_alarm_button_events_mask = 0b1111 << EVENT_ALARM_BUTTON_DOWN;
+const uint32_t _movement_mode_button_events_mask = 0b11111 << EVENT_MODE_BUTTON_DOWN;
+const uint32_t _movement_light_button_events_mask = 0b11111 << EVENT_LIGHT_BUTTON_DOWN;
+const uint32_t _movement_alarm_button_events_mask = 0b11111 << EVENT_ALARM_BUTTON_DOWN;
 const uint32_t _movement_button_events_mask = _movement_mode_button_events_mask | _movement_light_button_events_mask | _movement_alarm_button_events_mask;
 
 typedef struct {
@@ -111,26 +116,20 @@ movement_volatile_state_t movement_volatile_state;
 // The last sequence that we have been asked to play while the watch was in deep sleep
 static int8_t *_pending_sequence;
 
-// The note sequence of the default alarm
-int8_t alarm_tune[] = {
-    BUZZER_NOTE_C8, 3,
-    BUZZER_NOTE_REST, 4,
-    BUZZER_NOTE_C8, 3,
-    BUZZER_NOTE_REST, 4,
-    BUZZER_NOTE_C8, 3,
-    BUZZER_NOTE_REST, 4,
-    BUZZER_NOTE_C8, 5,
-    BUZZER_NOTE_REST, 38,
-    -8, 9,
-    0
-};
-
 int8_t _movement_dst_offset_cache[NUM_ZONE_NAMES] = {0};
 #define TIMEZONE_DOES_NOT_OBSERVE (-127)
+
+bool _movement_is_secondary_page(uint8_t page_index);
+bool _movement_is_tertiary_page(uint8_t page_index);
+uint8_t _movement_find_next_page(uint8_t page_index);
+uint8_t _movement_find_first_enabled_page(uint8_t page_index);
+void _movement_determine_page_group(uint8_t page_index, uint8_t* group_min_index, uint8_t* group_max_index, bool* is_secondary, bool* is_tertiary);
 
 void cb_mode_btn_interrupt(void);
 void cb_light_btn_interrupt(void);
 void cb_alarm_btn_interrupt(void);
+void cb_mode_btn_extwake(void);
+void cb_light_btn_extwake(void);
 void cb_alarm_btn_extwake(void);
 void cb_minute_alarm_fired(void);
 void cb_tick(void);
@@ -300,6 +299,7 @@ static uint32_t _movement_get_accelerometer_events() {
 static void _movement_handle_button_presses(uint32_t pending_events) {
     bool any_up = false;
     bool any_down = false;
+    bool any_long = false;
 
     movement_button_t* buttons[3] = {
         &movement_volatile_state.mode_button,
@@ -324,6 +324,12 @@ static void _movement_handle_button_presses(uint32_t pending_events) {
             movement_volatile_state.passthrough_events &= ~button_events_masks[i];
         }
 
+        // If a long press occurred
+        if (pending_events & (1 << button->down_event + 2)) {
+            watch_rtc_register_comp_callback_no_schedule(button->cb_longpress, button->down_timestamp + MOVEMENT_REALLY_LONG_PRESS_TICKS, button->timeout_index);
+            any_long = true;
+        }
+
         // If a button up or button long up occurred
         if (pending_events & (
             (1 << (button->down_event + 1)) |
@@ -345,7 +351,7 @@ static void _movement_handle_button_presses(uint32_t pending_events) {
         }
     }
 
-    if (any_down || any_up) {
+    if (any_down || any_up || any_long) {
         _movement_reset_inactivity_countdown();
         movement_volatile_state.schedule_next_comp = true;
     }
@@ -382,7 +388,7 @@ static void _movement_handle_scheduled_tasks(void) {
     uint8_t num_active_tasks = 0;
 
     for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
-        if (scheduled_tasks[i].reg) {
+        if (watch_face_status[i] && scheduled_tasks[i].reg) {
             if (scheduled_tasks[i].reg <= date_time.reg) {
                 scheduled_tasks[i].reg = 0;
                 movement_event_t background_event = { EVENT_BACKGROUND_TASK, 0 };
@@ -465,8 +471,8 @@ void movement_force_led_off(void) {
 
 bool movement_default_loop_handler(movement_event_t event) {
     switch (event.event_type) {
-        case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
+        case EVENT_MODE_BUTTON_DOWN:
+            movement_move_to_next_page();
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
             movement_illuminate_led();
@@ -477,13 +483,20 @@ bool movement_default_loop_handler(movement_event_t event) {
                 movement_force_led_off();
             }
             break;
-        case EVENT_MODE_LONG_PRESS:
-            if (MOVEMENT_SECONDARY_FACE_INDEX && movement_state.current_face_idx == 0) {
-                movement_move_to_face(MOVEMENT_SECONDARY_FACE_INDEX);
+        case EVENT_MODE_LONG_PRESS: {
+            uint8_t home_page = _movement_find_first_enabled_page(0);
+            uint8_t home_page_plus_one = _movement_find_first_enabled_page(_movement_find_next_page(home_page));
+            if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page_plus_one) {
+                movement_move_to_page(movement_state.secondary_page_idx);
             } else {
-                movement_move_to_face(0);
+                movement_move_to_page(home_page);
             }
             break;
+        }
+        case EVENT_MODE_REALLY_LONG_PRESS: {
+            movement_move_to_page(movement_state.tertiary_page_idx);
+            break;
+        }
         default:
             break;
     }
@@ -491,19 +504,163 @@ bool movement_default_loop_handler(movement_event_t event) {
     return true;
 }
 
-void movement_move_to_face(uint8_t watch_face_index) {
-    movement_state.watch_face_changed = true;
-    movement_state.next_face_idx = watch_face_index;
+uint8_t movement_get_num_faces(void) {
+    return MOVEMENT_NUM_FACES;
 }
 
-void movement_move_to_next_face(void) {
-    uint16_t face_max;
-    if (MOVEMENT_SECONDARY_FACE_INDEX) {
-        face_max = (movement_state.current_face_idx < (int16_t)MOVEMENT_SECONDARY_FACE_INDEX) ? MOVEMENT_SECONDARY_FACE_INDEX : MOVEMENT_NUM_FACES;
+uint8_t movement_page_to_face(uint8_t page_index) {
+    return page_to_face[page_index];
+}
+
+uint8_t movement_face_to_page(uint8_t watch_face_index) {
+    return face_to_page[watch_face_index];
+}
+
+bool _movement_is_secondary_page(uint8_t page_index) {
+    // NOTE: If the secondary_page_index is 0, effectively all pages are secondary
+    return page_index >= movement_state.secondary_page_idx;
+}
+
+bool _movement_is_tertiary_page(uint8_t page_index) {
+    // NOTE: If the tertiary_page_index is 0, effectively all pages are tertiary
+    return page_index >= movement_state.tertiary_page_idx;
+}
+
+void _movement_determine_page_group(uint8_t page_index, uint8_t* group_min_index, uint8_t* group_max_index, bool* is_secondary, bool* is_tertiary) {
+    if (_movement_is_tertiary_page(page_index)) {
+        *group_max_index = MOVEMENT_NUM_FACES;
+        *group_min_index = movement_state.tertiary_page_idx;
+        *is_secondary = false;
+        *is_tertiary = true;
+    } else if (_movement_is_secondary_page(page_index)) {
+        *group_max_index = movement_state.tertiary_page_idx;
+        *group_min_index = movement_state.secondary_page_idx;
+        *is_secondary = true;
+        *is_tertiary = false;
     } else {
-        face_max = MOVEMENT_NUM_FACES;
+        *group_max_index = movement_state.secondary_page_idx;
+        *group_min_index = 0;
+        *is_secondary = false;
+        *is_tertiary = false;
     }
-    movement_move_to_face((movement_state.current_face_idx + 1) % face_max);
+}
+
+uint8_t _movement_find_next_page(uint8_t page_index) {
+    uint8_t page_max;
+
+    if (_movement_is_tertiary_page(page_index)) {
+        page_max = MOVEMENT_NUM_FACES;
+    } else if (_movement_is_secondary_page(page_index)) {
+        page_max = movement_state.tertiary_page_idx;
+    } else {
+        page_max = movement_state.secondary_page_idx;
+    }
+
+    return (page_index + 1) % page_max;
+}
+
+uint8_t _movement_find_first_enabled_page(uint8_t page_index) {
+    bool found = false;
+
+    uint8_t enabled_page_index = page_index;
+
+    bool is_secondary;
+    bool is_tertiary;
+    uint8_t max_page_index;
+    uint8_t min_page_index;
+
+    _movement_determine_page_group(page_index, &min_page_index, &max_page_index, &is_secondary, &is_tertiary);
+
+    uint8_t num_pages = max_page_index - min_page_index;
+
+    for (uint8_t i = 0; i < num_pages; i++) {
+        uint8_t curr_page_index = min_page_index + (page_index - min_page_index + i) % num_pages;
+        if (movement_is_page_enabled(curr_page_index)) {
+            enabled_page_index  = curr_page_index;
+            found = true;
+
+            break;
+        }
+    }
+
+    if (found) {
+        return enabled_page_index;
+    }
+
+    // Corner case: If requesting a primary/secondary face (for example go to page 0)
+    // but all primary/secondary pages are disable, extend search to all pages
+    for (uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
+        uint8_t curr_page_index = (page_index + i) % MOVEMENT_NUM_FACES;
+        if (movement_is_page_enabled(curr_page_index)) {
+            enabled_page_index  = curr_page_index;
+
+            break;
+        }
+    }
+
+    return enabled_page_index;
+}
+
+void movement_move_to_page(uint8_t page_index) {
+    movement_state.watch_page_changed = true;
+    movement_state.next_page_idx = _movement_find_first_enabled_page(page_index);
+}
+
+void movement_move_to_next_page(void) {
+    movement_move_to_page(_movement_find_next_page(movement_state.current_page_idx));
+}
+
+void movement_swap_page_order(uint8_t page_a_index, uint8_t page_b_index) {
+    uint8_t face_a_index = movement_page_to_face(page_a_index);
+    uint8_t face_b_index = movement_page_to_face(page_b_index);
+
+    page_to_face[page_a_index] = face_b_index;
+    page_to_face[page_b_index] = face_a_index;
+
+    face_to_page[face_a_index] = page_b_index;
+    face_to_page[face_b_index] = page_a_index;
+}
+
+void movement_enable_page(uint8_t page_index, bool enable) {
+    movement_enable_face(movement_page_to_face(page_index), enable);
+}
+
+bool movement_is_page_enabled(uint8_t page_index) {
+    return movement_is_face_enabled(movement_page_to_face(page_index));
+}
+
+void movement_enable_face(uint8_t watch_face_index, bool enable) {
+    watch_face_status[watch_face_index] = enable;
+
+    if (!enable) {
+        movement_cancel_background_task_for_face(watch_face_index);
+    }
+}
+
+bool movement_is_face_enabled(uint8_t watch_face_index) {
+    return watch_face_status[watch_face_index];
+}
+
+uint8_t movement_get_secondary_page(void) {
+    return movement_state.secondary_page_idx;
+}
+
+void movement_set_secondary_page(uint8_t page_index) {
+    movement_state.secondary_page_idx = page_index;
+    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
+        movement_set_tertiary_page(movement_state.secondary_page_idx);
+    }
+}
+
+uint8_t movement_get_tertiary_page(void) {
+    return movement_state.tertiary_page_idx;
+}
+
+void movement_set_tertiary_page(uint8_t page_index) {
+    movement_state.tertiary_page_idx = page_index;
+    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
+        movement_set_secondary_page(movement_state.tertiary_page_idx);
+    }
 }
 
 void movement_schedule_background_task(watch_date_time_t date_time) {
@@ -586,8 +743,8 @@ void movement_play_alarm_beeps(uint8_t rounds, watch_buzzer_note_t alarm_note) {
         uint8_t note_idx = i * 2;
         uint8_t duration_idx = note_idx + 1;
 
-        int8_t note = alarm_tune[note_idx];
-        int8_t duration = alarm_tune[duration_idx];
+        int8_t note = default_alarm_tune[note_idx];
+        int8_t duration = default_alarm_tune[duration_idx];
 
         if (note == BUZZER_NOTE_C8) {
             note = alarm_note;
@@ -807,6 +964,14 @@ void movement_set_alarm_enabled(bool value) {
     movement_state.alarm_enabled = value;
 }
 
+bool movement_signal_enabled(void) {
+    return movement_state.signal_enabled;
+}
+
+void movement_set_signal_enabled(bool value) {
+    movement_state.signal_enabled = value;
+}
+
 bool movement_enable_tap_detection_if_available(void) {
     if (movement_state.has_lis2dw) {
         // configure tap duration threshold and enable Z axis
@@ -1004,6 +1169,9 @@ void app_init(void) {
         watch_rtc_set_date_time(date_time);
     }
 
+    movement_custom_signal_tunes_init();
+    movement_custom_alarm_tunes_init();
+
     // register callbacks to be notified when buzzer starts/stops playing.
     // this is so movement can be notified even when triggered by a face bypassing movement
     watch_buzzer_register_global_callbacks(cb_buzzer_start, cb_buzzer_stop);
@@ -1021,6 +1189,8 @@ void app_init(void) {
 
     // set up the 1 minute alarm (for background tasks and low power updates)
     _movement_set_top_of_minute_alarm();
+
+    watch_enable_external_interrupts();
 }
 
 void app_wake_from_backup(void) {
@@ -1037,10 +1207,21 @@ void app_setup(void) {
         #endif
 
         for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
+            page_to_face[i] = i;
+            face_to_page[i] = i;
+            watch_face_status[i] = true;
             watch_face_contexts[i] = NULL;
             scheduled_tasks[i].reg = 0;
             is_first_launch = false;
         }
+
+        movement_state.secondary_page_idx = MOVEMENT_SECONDARY_FACE_INDEX;
+        movement_state.tertiary_page_idx = MOVEMENT_TERTIARY_FACE_INDEX;
+        if (movement_state.tertiary_page_idx < movement_state.secondary_page_idx) {
+            movement_state.tertiary_page_idx = movement_state.secondary_page_idx;
+        }
+        movement_state.current_page_idx = _movement_find_first_enabled_page(0);
+        movement_state.current_face_idx = movement_page_to_face(movement_state.current_page_idx);
 
 #if __EMSCRIPTEN__
         int32_t time_zone_offset = EM_ASM_INT({
@@ -1059,9 +1240,6 @@ void app_setup(void) {
     watch_enable_display();
 
     if (!movement_volatile_state.is_sleeping) {
-        watch_disable_extwake_interrupt(HAL_GPIO_BTN_ALARM_pin());
-
-        watch_enable_external_interrupts();
         watch_register_interrupt_callback(HAL_GPIO_BTN_MODE_pin(), cb_mode_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
         watch_register_interrupt_callback(HAL_GPIO_BTN_LIGHT_pin(), cb_light_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
         watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
@@ -1186,7 +1364,8 @@ static bool _switch_face(void) {
     const watch_face_t *wf = &watch_faces[movement_state.current_face_idx];
 
     wf->resign(watch_face_contexts[movement_state.current_face_idx]);
-    movement_state.current_face_idx = movement_state.next_face_idx;
+    movement_state.current_page_idx = movement_state.next_page_idx;
+    movement_state.current_face_idx = movement_page_to_face(movement_state.current_page_idx);
     // we have just updated the face idx, so we must recache the watch face pointer.
     wf = &watch_faces[movement_state.current_face_idx];
     watch_clear_display();
@@ -1194,7 +1373,8 @@ static bool _switch_face(void) {
 
     if (movement_state.settings.bit.button_should_sound) {
         // low note for nonzero case, high note for return to watch_face 0
-        movement_play_note(movement_state.next_face_idx ? BUZZER_NOTE_C7 : BUZZER_NOTE_C8, 50);
+        uint8_t home_page = _movement_find_first_enabled_page(0);
+        movement_play_note(movement_state.next_page_idx == home_page ? BUZZER_NOTE_C8 : BUZZER_NOTE_C7, 50);
     }
 
     wf->activate(watch_face_contexts[movement_state.current_face_idx]);
@@ -1202,7 +1382,7 @@ static bool _switch_face(void) {
     movement_event_t event;
     event.subsecond = 0;
     event.event_type = EVENT_ACTIVATE;
-    movement_state.watch_face_changed = false;
+    movement_state.watch_page_changed = false;
     bool can_sleep = wf->loop(event, watch_face_contexts[movement_state.current_face_idx]);
 
     // Button events that follow a down event that happened on the previous face should not be forwarded to the new face
@@ -1295,8 +1475,8 @@ bool app_loop(void) {
         can_sleep = wf->loop(event, watch_face_contexts[movement_state.current_face_idx]) && can_sleep;
     }
 
-    // The watch_face_changed flag might be set again by the face loop, so check it again
-    if (movement_state.watch_face_changed) {
+    // The watch_page_changed flag might be set again by the face loop, so check it again
+    if (movement_state.watch_page_changed) {
         can_sleep = _switch_face() && can_sleep;
     }
 
@@ -1309,7 +1489,9 @@ bool app_loop(void) {
         // No need to fire resign and sleep interrupts while in sleep mode
         _movement_disable_inactivity_countdown();
 
-        watch_register_extwake_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_extwake, true);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_MODE_pin(), cb_mode_btn_extwake, INTERRUPT_TRIGGER_RISING);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_LIGHT_pin(), cb_light_btn_extwake, INTERRUPT_TRIGGER_RISING);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_extwake, INTERRUPT_TRIGGER_RISING);
 
         // _sleep_mode_app_loop takes over at this point and loops until exit_sleep_mode is set by the extwake handler,
         // or wake is requested using the movement_request_wake function.
@@ -1420,8 +1602,15 @@ static movement_event_type_t _process_button_longpress_timeout(bool pin_level, m
         return EVENT_NONE;
     }
 
+    uint32_t counter = watch_rtc_get_counter();
+    bool really_long_press = (counter - button->down_timestamp) >= MOVEMENT_REALLY_LONG_PRESS_TICKS;
+
     if (pin_level) {
-        return button->down_event + 2; // event_longpress
+        if (really_long_press) {
+            return button->down_event + 4; // event_really_longpress
+        } else {
+            return button->down_event + 2; // event_longpress
+        }
     } else {
     // hypotetical corner case: if the timeout fired but the pin level is actually up, we may have missed/rejected the up event, so fire it here
 #if MOVEMENT_DEBOUNCE_TICKS
@@ -1429,7 +1618,11 @@ static movement_event_type_t _process_button_longpress_timeout(bool pin_level, m
         button->up_timestamp = button->down_timestamp;
 #endif
         button->is_down = false;
-        return button->down_event + 1; // event_up
+        if (really_long_press) {
+            return button->down_event + 3; // event_long_up
+        } else {
+            return button->down_event + 1; // event_up
+        }
     }
 }
 
@@ -1466,9 +1659,19 @@ void cb_sleep_timeout_interrupt(void) {
     movement_request_sleep();
 }
 
-void cb_alarm_btn_extwake(void) {
-    // wake up!
+void cb_mode_btn_extwake(void) {
     movement_request_wake();
+    cb_mode_btn_interrupt();
+}
+
+void cb_light_btn_extwake(void) {
+    movement_request_wake();
+    cb_light_btn_interrupt();
+}
+
+void cb_alarm_btn_extwake(void) {
+    movement_request_wake();
+    cb_alarm_btn_interrupt();
 }
 
 void cb_minute_alarm_fired(void) {

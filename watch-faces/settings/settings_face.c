@@ -383,15 +383,11 @@ bool settings_face_loop(movement_event_t event, void *context) {
             watch_clear_display();
             state->settings_screens[state->current_page].display(event.subsecond);
             break;
-        case EVENT_MODE_BUTTON_UP:
-            movement_force_led_off();
-            movement_move_to_next_face();
-            return true;
-        case EVENT_ALARM_BUTTON_UP:
+        case EVENT_ALARM_BUTTON_DOWN:
             state->settings_screens[state->current_page].advance();
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             return movement_default_loop_handler(event);

@@ -36,6 +36,7 @@
 #include <string.h>
 #include "totp_face.h"
 #include "watch.h"
+#include "movement_pin_service.h"
 #include "TOTP.h"
 #include "base32.h"
 
@@ -169,6 +170,7 @@ void totp_face_setup(uint8_t watch_face_index, void ** context_ptr) {
     if (*context_ptr == NULL) {
         totp_state_t *totp = malloc(sizeof(totp_state_t));
         totp->current_decoded_key = malloc(TOTP_FACE_MAX_KEY_LENGTH);
+        totp->face_index = watch_face_index;
         *context_ptr = totp;
     }
 }
@@ -191,6 +193,10 @@ bool totp_face_loop(movement_event_t event, void *context) {
 
     totp_state_t *totp_state = (totp_state_t *) context;
 
+    if (movement_pin_service_is_locked()) {
+        return movement_pin_service_loop(event, totp_state->face_index, "totp", "2f");
+    }
+
     switch (event.event_type) {
         case EVENT_TICK:
             totp_state->timestamp++;
@@ -199,7 +205,7 @@ bool totp_face_loop(movement_event_t event, void *context) {
             totp_display(totp_state);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         case EVENT_ALARM_BUTTON_UP:
             if ((size_t)totp_state->current_index + 1 < totp_total()) {
