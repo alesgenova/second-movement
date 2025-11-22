@@ -169,6 +169,7 @@ void watch_display_string(const char *string, uint8_t position) {
 }
 
 void watch_display_text(watch_position_t location, const char *string) {
+    if(!string[0]) return; // empty string, nothing to do
     switch (location) {
         case WATCH_POSITION_TOP:
         case WATCH_POSITION_TOP_LEFT:
