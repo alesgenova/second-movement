@@ -40,10 +40,9 @@ typedef struct {
     float z;
 } lis2dw_acceleration_measurement_t;
 
-#define LIS2DW_FIFO_MAX_COUNT 32
 typedef struct {
     int8_t count;
-    lis2dw_reading_t readings[LIS2DW_FIFO_MAX_COUNT];
+    lis2dw_reading_t readings[32];
 } lis2dw_fifo_t;
 
 typedef enum {
