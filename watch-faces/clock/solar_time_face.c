@@ -219,7 +219,7 @@ bool solar_time_face_loop(movement_event_t event, void *context) {
 
         case EVENT_TIMEOUT:
             state->mode = SOLAR_TIME_MODE_LST;
-            if (_load_location().reg == 0) movement_move_to_face(0);
+            if (_load_location().reg == 0) movement_move_to_page(0);
             break;
 
         default:

@@ -312,7 +312,7 @@ static bool _clock_loop(movement_event_t event, world_clock2_state_t *state)
         case EVENT_MODE_BUTTON_UP:
             /* Reset frequency and move to next face */
             movement_request_tick_frequency(1);
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
         default:
             return movement_default_loop_handler(event);

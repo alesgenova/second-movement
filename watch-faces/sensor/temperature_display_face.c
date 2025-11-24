@@ -59,7 +59,7 @@ bool temperature_display_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ACTIVATE:
             if (skip) {
-                movement_move_to_next_face();
+                movement_move_to_next_page();
                 return false;
             }
             if (watch_sleep_animation_is_running()) watch_stop_sleep_animation();

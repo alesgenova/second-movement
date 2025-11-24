@@ -254,7 +254,7 @@ bool countdown_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_MODE_BUTTON_UP:
             abort_quick_ticks(state);
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
         case EVENT_LIGHT_BUTTON_UP:
             switch(state->mode) {
@@ -359,7 +359,7 @@ bool countdown_face_loop(movement_event_t event, void *context) {
                 movement_request_tick_frequency(1);
             }
             if (state->mode != cd_running) {
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             }
             break;
         case EVENT_LOW_ENERGY_UPDATE:

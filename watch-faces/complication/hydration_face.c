@@ -445,7 +445,7 @@ static void _check_hydration_alert(hydration_state_t *state)
          * currently on screen, so request the wake here rather than relying
          * on this face's own EVENT_LOW_ENERGY_UPDATE handler to catch it. */
         movement_request_wake();
-        movement_move_to_face(state->face_index);
+        movement_move_to_page(movement_face_to_page(state->face_index));
         movement_play_alarm();
     }
 }
@@ -509,7 +509,7 @@ static bool _tracking_loop(movement_event_t event, void *context)
             _check_hydration_alert(state);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             movement_default_loop_handler(event);
@@ -548,7 +548,7 @@ static bool _log_loop(movement_event_t event, void *context)
             _check_hydration_alert(state);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             movement_default_loop_handler(event);
@@ -612,7 +612,7 @@ static bool _settings_loop(movement_event_t event, void *context)
             _check_hydration_alert(state);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             movement_default_loop_handler(event);
