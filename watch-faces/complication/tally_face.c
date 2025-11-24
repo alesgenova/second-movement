@@ -148,7 +148,7 @@ bool tally_face_loop(movement_event_t event, void *context) {
         case EVENT_MODE_LONG_PRESS:
             if (tally_face_should_move_back(state)) {
                 _init_val = true;
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             }
             else {
                 state->tally_idx = _tally_default[state->tally_default_idx]; // reset tally index

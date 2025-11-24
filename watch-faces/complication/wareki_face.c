@@ -189,7 +189,7 @@ bool wareki_loop(movement_event_t event, void *context) {
             draw_wareki_splash(state);
             break;
         case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
 
         case EVENT_LOW_ENERGY_UPDATE:
@@ -265,7 +265,7 @@ bool wareki_loop(movement_event_t event, void *context) {
 
         case EVENT_TIMEOUT:
             //printf("time out ! \n");
-            movement_move_to_face(0);
+            movement_move_to_page(0);
 
             break;
         //case EVENT_LOW_ENERGY_UPDATE:
