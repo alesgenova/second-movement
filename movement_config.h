@@ -27,54 +27,44 @@
 
 #include "movement_faces.h"
 
-const watch_face_t watch_faces[] = {
-    // primary faces
-    stock_clock_face,
-    alarm_face,
-    fast_stopwatch_face,
-    countdown_face,
-    sunrise_sunset_face,
-    moon_phase_face,
+/* The F() below is a trick to be able to get the face as well as its name */
 
-    // secondary faces
-    totp_lfs_face,
-    tunes_face,
-    probability_face,
-    wordle_face,
-    counter_face,
+#define PRIMARY_FACES(F) \
+    F(stock_clock) \
+    F(alarm) \
+    F(fast_stopwatch) \
+    F(countdown) \
+    F(sunrise_sunset) \
+    F(moon_phase)
 
-    // tertiary faces
-    settings_face,
-    set_time_face,
-    page_ordering_face,
-    temperature_display_face,
-    pin_face,
-    voltage_face,
-    rtccount_face,
-    finetune_face,
-    nanosec_face,
-};
+#define SECONDARY_FACES(F) \
+    F(totp_lfs) \
+    F(tunes) \
+    F(probability) \
+    F(wordle) \
+    F(counter)
 
-#define MOVEMENT_NUM_FACES (sizeof(watch_faces) / sizeof(watch_face_t))
+#define TERTIARY_FACES(F) \
+    F(settings) \
+    F(set_time) \
+    F(page_ordering) \
+    F(temperature_display) \
+    F(pin) \
+    F(voltage) \
+    F(rtccount) \
+    F(finetune) \
+    F(nanosec)
 
-/* Determines what face to go to from the first face on long press of the Mode button.
- * Also excludes these faces from the normal rotation.
- * In the default firmware, this lets you access temperature and battery voltage with a long press of Mode.
- * Some folks also like to use this to hide the preferences and time set faces from the normal rotation.
- * If you don't want any faces to be excluded, set this to 0 and a long Mode press will have no effect.
- */
-#define MOVEMENT_SECONDARY_FACE_INDEX (MOVEMENT_NUM_FACES - 14)
-#define MOVEMENT_TERTIARY_FACE_INDEX (MOVEMENT_NUM_FACES - 9)
 
 /* Determines the intensity of the led colors
  * Set a hex value 0-15 with 0x0 being off and 0xF being max intensity
  */
-#define MOVEMENT_DEFAULT_RED_COLOR 0x0
+#define MOVEMENT_DEFAULT_RED_COLOR 0xF
 #define MOVEMENT_DEFAULT_GREEN_COLOR 0xF
-#define MOVEMENT_DEFAULT_BLUE_COLOR 0x0
+#define MOVEMENT_DEFAULT_BLUE_COLOR 0xF
 
 /* Set to true for 24h mode or false for 12h mode */
-#define MOVEMENT_DEFAULT_24H_MODE false
+#define MOVEMENT_DEFAULT_24H_MODE true
 
 /* Enable or disable the sound on mode button press */
 #define MOVEMENT_DEFAULT_BUTTON_SOUND true
