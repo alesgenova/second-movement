@@ -86,4 +86,5 @@
 #include "solar_time_face.h"
 #include "tide_face.h"
 #include "tunes_face.h"
+#include "page_ordering_face.h"
 // New includes go above this line.

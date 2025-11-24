@@ -237,7 +237,7 @@ static bool _world_clock_face_do_settings_mode(movement_event_t event, world_clo
     switch (event.event_type) {
         case EVENT_MODE_BUTTON_UP:
             persist_world_clock_settings(state);
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             return false;
         case EVENT_LIGHT_BUTTON_DOWN:
             state->current_screen++;
@@ -273,7 +273,7 @@ static bool _world_clock_face_do_settings_mode(movement_event_t event, world_clo
             break;
         case EVENT_TIMEOUT:
             persist_world_clock_settings(state);
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         default:
             break;

@@ -59,6 +59,9 @@ void _wake_up_simulator(void);
 #endif
 
 volatile movement_state_t movement_state;
+uint16_t page_to_face[MOVEMENT_NUM_FACES]; // i-th el. is the face_index for page i
+uint16_t face_to_page[MOVEMENT_NUM_FACES]; // i-th el. is the page_index for face i
+bool watch_face_status[MOVEMENT_NUM_FACES]; // i-th el. indicates if face i is enabled
 void * watch_face_contexts[MOVEMENT_NUM_FACES];
 watch_date_time_t scheduled_tasks[MOVEMENT_NUM_FACES];
 const int32_t movement_le_inactivity_deadlines[8] = {INT_MAX, 600, 3600, 7200, 21600, 43200, 86400, 604800};
@@ -387,7 +390,7 @@ static void _movement_handle_scheduled_tasks(void) {
     uint8_t num_active_tasks = 0;
 
     for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
-        if (scheduled_tasks[i].reg) {
+        if (watch_face_status[i] && scheduled_tasks[i].reg) {
             if (scheduled_tasks[i].reg <= date_time.reg) {
                 scheduled_tasks[i].reg = 0;
                 movement_event_t background_event = { EVENT_BACKGROUND_TASK, 0 };
@@ -471,7 +474,7 @@ void movement_force_led_off(void) {
 bool movement_default_loop_handler(movement_event_t event) {
     switch (event.event_type) {
         case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             break;
         case EVENT_LIGHT_BUTTON_DOWN:
             movement_illuminate_led();
@@ -482,13 +485,15 @@ bool movement_default_loop_handler(movement_event_t event) {
                 movement_force_led_off();
             }
             break;
-        case EVENT_MODE_LONG_PRESS:
-            if (MOVEMENT_SECONDARY_FACE_INDEX && movement_state.current_face_idx == 0) {
-                movement_move_to_face(MOVEMENT_SECONDARY_FACE_INDEX);
+        case EVENT_MODE_LONG_PRESS: {
+            uint8_t home_page = movement_find_first_enabled_page(0);
+            if (movement_state.secondary_page_idx && movement_state.current_page_idx == home_page) {
+                movement_move_to_page(movement_state.secondary_page_idx);
             } else {
-                movement_move_to_face(0);
+                movement_move_to_page(home_page);
             }
             break;
+        }
         default:
             break;
     }
@@ -496,19 +501,107 @@ bool movement_default_loop_handler(movement_event_t event) {
     return true;
 }
 
-void movement_move_to_face(uint8_t watch_face_index) {
-    movement_state.watch_face_changed = true;
-    movement_state.next_face_idx = watch_face_index;
+uint8_t movement_get_num_faces(void) {
+    return MOVEMENT_NUM_FACES;
 }
 
-void movement_move_to_next_face(void) {
-    uint16_t face_max;
-    if (MOVEMENT_SECONDARY_FACE_INDEX) {
-        face_max = (movement_state.current_face_idx < (int16_t)MOVEMENT_SECONDARY_FACE_INDEX) ? MOVEMENT_SECONDARY_FACE_INDEX : MOVEMENT_NUM_FACES;
-    } else {
-        face_max = MOVEMENT_NUM_FACES;
+uint8_t movement_page_to_face(uint8_t page_index) {
+    return page_to_face[page_index];
+}
+
+uint8_t movement_face_to_page(uint8_t watch_face_index) {
+    return face_to_page[watch_face_index];
+}
+
+bool movement_is_secondary_page(uint8_t page_index) {
+    // NOTE: If the secondary_page_index is 0, effectively all pages are secondary
+    return page_index >= movement_state.secondary_page_idx;
+}
+
+uint8_t movement_find_first_enabled_page(uint8_t page_index) {
+    bool found = false;
+    bool is_secondary = movement_is_secondary_page(page_index);
+
+    uint8_t enabled_page_index = page_index;
+
+    uint8_t max_page_index = is_secondary ? MOVEMENT_NUM_FACES : movement_state.secondary_page_idx;
+
+    for (uint8_t i = 0; i < max_page_index; i++) {
+        uint8_t curr_page_index = (page_index + i) % max_page_index;
+        if (movement_is_page_enabled(curr_page_index)) {
+            enabled_page_index  = curr_page_index;
+            found = true;
+
+            break;
+        }
     }
-    movement_move_to_face((movement_state.current_face_idx + 1) % face_max);
+
+    if (found || is_secondary) {
+        return enabled_page_index;
+    }
+
+    // Corner case: If requesting a primary face (for example go to page 0)
+    // but all primary pages are disable, extend search to secondary pages
+    for (uint8_t i = movement_state.secondary_page_idx; i < MOVEMENT_NUM_FACES; i++) {
+        uint8_t curr_page_index = i % MOVEMENT_NUM_FACES;
+        if (movement_is_page_enabled(curr_page_index)) {
+            enabled_page_index  = curr_page_index;
+
+            break;
+        }
+    }
+
+    return enabled_page_index;
+}
+
+void movement_move_to_page(uint8_t page_index) {
+    movement_state.watch_page_changed = true;
+    movement_state.next_page_idx = movement_find_first_enabled_page(page_index);
+}
+
+void movement_move_to_next_page(void) {
+    uint8_t page_max = movement_is_secondary_page(movement_state.current_page_idx) ? MOVEMENT_NUM_FACES : movement_state.secondary_page_idx;
+
+    movement_move_to_page((movement_state.current_page_idx + 1) % page_max);
+}
+
+void movement_swap_page_order(uint8_t page_a_index, uint8_t page_b_index) {
+    uint8_t face_a_index = movement_page_to_face(page_a_index);
+    uint8_t face_b_index = movement_page_to_face(page_b_index);
+
+    page_to_face[page_a_index] = face_b_index;
+    page_to_face[page_b_index] = face_a_index;
+
+    face_to_page[face_a_index] = page_b_index;
+    face_to_page[face_b_index] = page_a_index;
+}
+
+void movement_enable_page(uint8_t page_index, bool enable) {
+    movement_enable_face(movement_page_to_face(page_index), enable);
+}
+
+bool movement_is_page_enabled(uint8_t page_index) {
+    return movement_is_face_enabled(movement_page_to_face(page_index));
+}
+
+void movement_enable_face(uint8_t watch_face_index, bool enable) {
+    watch_face_status[watch_face_index] = enable;
+
+    if (!enable) {
+        movement_cancel_background_task_for_face(watch_face_index);
+    }
+}
+
+bool movement_is_face_enabled(uint8_t watch_face_index) {
+    return watch_face_status[watch_face_index];
+}
+
+uint8_t movement_get_secondary_page(void) {
+    return movement_state.secondary_page_idx;
+}
+
+void movement_set_secondary_page(uint8_t page_index) {
+    movement_state.secondary_page_idx = page_index;
 }
 
 void movement_schedule_background_task(watch_date_time_t date_time) {
@@ -1086,10 +1179,17 @@ void app_setup(void) {
         #endif
 
         for(uint8_t i = 0; i < MOVEMENT_NUM_FACES; i++) {
+            page_to_face[i] = i;
+            face_to_page[i] = i;
+            watch_face_status[i] = true;
             watch_face_contexts[i] = NULL;
             scheduled_tasks[i].reg = 0;
             is_first_launch = false;
         }
+
+        movement_state.secondary_page_idx = MOVEMENT_SECONDARY_FACE_INDEX;
+        movement_state.current_page_idx = movement_find_first_enabled_page(0);
+        movement_state.current_face_idx = movement_page_to_face(movement_state.current_page_idx);
 
 #if __EMSCRIPTEN__
         int32_t time_zone_offset = EM_ASM_INT({
@@ -1235,7 +1335,8 @@ static bool _switch_face(void) {
     const watch_face_t *wf = &watch_faces[movement_state.current_face_idx];
 
     wf->resign(watch_face_contexts[movement_state.current_face_idx]);
-    movement_state.current_face_idx = movement_state.next_face_idx;
+    movement_state.current_page_idx = movement_state.next_page_idx;
+    movement_state.current_face_idx = movement_page_to_face(movement_state.current_page_idx);
     // we have just updated the face idx, so we must recache the watch face pointer.
     wf = &watch_faces[movement_state.current_face_idx];
     watch_clear_display();
@@ -1243,7 +1344,8 @@ static bool _switch_face(void) {
 
     if (movement_state.settings.bit.button_should_sound) {
         // low note for nonzero case, high note for return to watch_face 0
-        movement_play_note(movement_state.next_face_idx ? BUZZER_NOTE_C7 : BUZZER_NOTE_C8, 50);
+        uint8_t home_page = movement_find_first_enabled_page(0);
+        movement_play_note(movement_state.next_page_idx == home_page ? BUZZER_NOTE_C8 : BUZZER_NOTE_C7, 50);
     }
 
     wf->activate(watch_face_contexts[movement_state.current_face_idx]);
@@ -1251,7 +1353,7 @@ static bool _switch_face(void) {
     movement_event_t event;
     event.subsecond = 0;
     event.event_type = EVENT_ACTIVATE;
-    movement_state.watch_face_changed = false;
+    movement_state.watch_page_changed = false;
     bool can_sleep = wf->loop(event, watch_face_contexts[movement_state.current_face_idx]);
 
     // Button events that follow a down event that happened on the previous face should not be forwarded to the new face
@@ -1344,8 +1446,8 @@ bool app_loop(void) {
         can_sleep = wf->loop(event, watch_face_contexts[movement_state.current_face_idx]) && can_sleep;
     }
 
-    // The watch_face_changed flag might be set again by the face loop, so check it again
-    if (movement_state.watch_face_changed) {
+    // The watch_page_changed flag might be set again by the face loop, so check it again
+    if (movement_state.watch_page_changed) {
         can_sleep = _switch_face() && can_sleep;
     }
 

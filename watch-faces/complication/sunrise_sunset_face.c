@@ -570,7 +570,7 @@ bool sunrise_sunset_face_loop(movement_event_t event, void *context) {
         case EVENT_TIMEOUT:
             if (load_location_from_filesystem().reg == 0) {
                 // if no location set, return home
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             } else if (state->page || state->rise_index) {
                 // otherwise on timeout, exit settings mode and return to the next sunrise or sunset
                 state->page = 0;

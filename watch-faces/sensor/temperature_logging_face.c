@@ -103,7 +103,7 @@ bool temperature_logging_face_loop(movement_event_t event, void *context) {
     temperature_logging_state_t *logger_state = (temperature_logging_state_t *)context;
     switch (event.event_type) {
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         case EVENT_LIGHT_LONG_PRESS:
             // light button shows the timestamp, but if you need the light, long press it.
@@ -119,7 +119,7 @@ bool temperature_logging_face_loop(movement_event_t event, void *context) {
             // fall through
         case EVENT_ACTIVATE:
             if (skip) {
-                movement_move_to_next_face();
+                movement_move_to_next_page();
                 return false;
             }
             _temperature_logging_face_update_display(logger_state, movement_use_imperial_units(), movement_clock_mode_24h());

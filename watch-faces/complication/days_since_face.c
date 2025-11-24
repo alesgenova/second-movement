@@ -288,7 +288,7 @@ bool days_since_face_loop(movement_event_t event, void *context) {
             _days_since_face_abort_quick_cycle(state);
             // return home if we're on a settings page (this saves our changes when we resign).
             if (state->current_page != PAGE_DISPLAY) {
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             }
             break;
         default:
