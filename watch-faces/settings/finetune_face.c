@@ -149,6 +149,9 @@ bool finetune_face_loop(movement_event_t event, void *context) {
 
             finetune_update_display();
             break;
+        
+        case EVENT_MODE_BUTTON_DOWN:
+            break;
 
         case EVENT_MODE_BUTTON_UP:
             // Only allow for fast exit when correction is 0!!!

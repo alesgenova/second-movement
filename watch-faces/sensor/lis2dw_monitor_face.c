@@ -505,7 +505,7 @@ static bool _settings_loop(movement_event_t event, void *context)
             state->settings_page = (state->settings_page + 1) % NUM_SETTINGS;
             state->settings[state->settings_page].display(context, event.subsecond);
             break;
-        case EVENT_MODE_BUTTON_UP:
+        case EVENT_MODE_BUTTON_DOWN:
             _lis2dw_set_state(&state->ds);
             _lis2dw_print_state(&state->ds);
             _switch_to_monitor(state);
