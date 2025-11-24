@@ -152,8 +152,8 @@ bool simple_coin_flip_face_loop(movement_event_t event, void *context) {
             }
             break;
         //execute same action for light and alarm button
-        case EVENT_LIGHT_BUTTON_UP:
-        case EVENT_ALARM_BUTTON_UP:
+        case EVENT_LIGHT_BUTTON_DOWN:
+        case EVENT_ALARM_BUTTON_DOWN:
             if (!state->active) {
                 state->active = true;
                 _blink_face_update_lcd(state);
