@@ -634,7 +634,7 @@ bool wordle_face_loop(movement_event_t event, void *context) {
             if (state->curr_screen >= WORDLE_SCREEN_PLAYING) {
                 _activate(state);
             } else {
-                movement_move_to_face(0);
+                movement_move_to_page(0);
             }
             break;
             default:
