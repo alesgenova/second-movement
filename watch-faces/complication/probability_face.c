@@ -271,7 +271,7 @@ bool probability_face_loop(movement_event_t event, void *context)
         cycle_dice_type(state);
         display_dice_roll(state);
         break;
-    case EVENT_ALARM_BUTTON_UP:
+    case EVENT_ALARM_BUTTON_DOWN:
         // Roll the die
         roll_dice(state);
         break;

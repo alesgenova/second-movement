@@ -176,7 +176,7 @@ bool breathing_face_loop(movement_event_t event, void *context) {
             state->current_stage = (state->current_stage + 1) % 16;
 
             break;
-        case EVENT_ALARM_BUTTON_UP:
+        case EVENT_ALARM_BUTTON_DOWN:
             // Cycle through the indication modes
             state->indication_mode = (state->indication_mode + 1) % 3;
             update_indicators(state);
