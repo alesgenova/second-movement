@@ -29,31 +29,31 @@
 
 /* The F() below is a trick to be able to get the face as well as its name */
 
-#define FOREACH_PRIMARY_FACE(F) \
-    F(stock_clock_face)         \
-    F(alarm_face)               \
-    F(fast_stopwatch_face)      \
-    F(countdown_face)           \
-    F(sunrise_sunset_face)      \
-    F(moon_phase_face)
+#define PRIMARY_FACES(F) \
+    F(stock_clock) \
+    F(alarm) \
+    F(fast_stopwatch) \
+    F(countdown) \
+    F(sunrise_sunset) \
+    F(moon_phase)
 
-#define FOREACH_SECONDARY_FACE(F) \
-    F(totp_lfs_face)              \
-    F(tunes_face)                 \
-    F(probability_face)           \
-    F(wordle_face)                \
-    F(counter_face)
+#define SECONDARY_FACES(F) \
+    F(totp_lfs) \
+    F(tunes) \
+    F(probability) \
+    F(wordle) \
+    F(counter)
 
-#define FOREACH_TERTIARY_FACE(F)    \
-    F(settings_face)                \
-    F(set_time_face)                \
-    F(page_ordering_face)           \
-    F(temperature_display_face)     \
-    F(pin_face)                     \
-    F(voltage_face)                 \
-    F(rtccount_face)                \
-    F(finetune_face)                \
-    F(nanosec_face)
+#define TERTIARY_FACES(F) \
+    F(settings) \
+    F(set_time) \
+    F(page_ordering) \
+    F(temperature_display) \
+    F(pin) \
+    F(voltage) \
+    F(rtccount) \
+    F(finetune) \
+    F(nanosec)
 
 
 /* Determines the intensity of the led colors

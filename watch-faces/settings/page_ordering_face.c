@@ -28,15 +28,15 @@
 #include "movement_config.h"
 #include "delay.h"
 
+/* MOVEMENT_FACE_NAME gives a string of the name of the face, which can
+ * then be used to get the names of the faces in a user interface.
+ */
+#define MOVEMENT_FACE_NAME(name) #name,
 
 const char *watch_face_names[] = {
-    /* MOVEMENT_FACE_NAME gives a string of the name of the face, which can
-     * then be used to get the names of the faces in a user interface.
-     */
-#define MOVEMENT_FACE_NAME(face_name) #face_name,
-    FOREACH_PRIMARY_FACE(MOVEMENT_FACE_NAME)
-    FOREACH_SECONDARY_FACE(MOVEMENT_FACE_NAME)
-    FOREACH_TERTIARY_FACE(MOVEMENT_FACE_NAME)
+    PRIMARY_FACES(MOVEMENT_FACE_NAME)
+    SECONDARY_FACES(MOVEMENT_FACE_NAME)
+    TERTIARY_FACES(MOVEMENT_FACE_NAME)
 };
 
 typedef struct {

@@ -55,23 +55,21 @@
  * This means it gives the C reference to the face.
  */
 
-#define MOVEMENT_FACE_VALUE(face_name) face_name,
-#define PRIMARY_FACES   FOREACH_PRIMARY_FACE(MOVEMENT_FACE_VALUE)
-#define SECONDARY_FACES FOREACH_SECONDARY_FACE(MOVEMENT_FACE_VALUE)
-#define TERTIARY_FACES  FOREACH_TERTIARY_FACE(MOVEMENT_FACE_VALUE)
+#define MOVEMENT_FACE_VALUE(name) name##_face,
+#define MOVEMENT_FACE_COUNT(_) +1
 
 /* If you get errors, make sure that / and , are correct above!!! */
 
 const watch_face_t watch_faces[] = {
-    PRIMARY_FACES
-    SECONDARY_FACES
-    TERTIARY_FACES
+    PRIMARY_FACES(MOVEMENT_FACE_VALUE)
+    SECONDARY_FACES(MOVEMENT_FACE_VALUE)
+    TERTIARY_FACES(MOVEMENT_FACE_VALUE)
 };
 
 enum
 {
-    MOVEMENT_SECONDARY_FACE_INDEX = sizeof((watch_face_t[]){PRIMARY_FACES}) / sizeof(watch_face_t),
-    MOVEMENT_TERTIARY_FACE_INDEX = sizeof((watch_face_t[]){PRIMARY_FACES SECONDARY_FACES}) / sizeof(watch_face_t),
+    MOVEMENT_SECONDARY_FACE_INDEX = PRIMARY_FACES(MOVEMENT_FACE_COUNT),
+    MOVEMENT_TERTIARY_FACE_INDEX = PRIMARY_FACES(MOVEMENT_FACE_COUNT) + SECONDARY_FACES(MOVEMENT_FACE_COUNT),
     MOVEMENT_NUM_FACES = sizeof(watch_faces) / sizeof(watch_face_t),
 };
 
@@ -633,6 +631,10 @@ uint8_t _movement_find_first_enabled_page(uint8_t page_index) {
 }
 
 void movement_move_to_page(uint8_t page_index) {
+    if (page_index >= MOVEMENT_NUM_FACES) {
+        return;
+    }
+
     movement_state.watch_page_changed = true;
     movement_state.next_page_idx = _movement_find_first_enabled_page(page_index);
 }
@@ -678,8 +680,8 @@ uint8_t movement_get_secondary_page(void) {
 
 void movement_set_secondary_page(uint8_t page_index) {
     movement_state.secondary_page_idx = page_index;
-    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
-        movement_set_tertiary_page(movement_state.secondary_page_idx);
+    if (movement_state.secondary_page_idx >= movement_state.tertiary_page_idx) {
+        movement_set_tertiary_page(MOVEMENT_NUM_FACES);
     }
 }
 
@@ -688,10 +690,11 @@ uint8_t movement_get_tertiary_page(void) {
 }
 
 void movement_set_tertiary_page(uint8_t page_index) {
-    movement_state.tertiary_page_idx = page_index;
-    if (movement_state.secondary_page_idx > movement_state.tertiary_page_idx) {
-        movement_set_secondary_page(movement_state.tertiary_page_idx);
+    if (movement_state.secondary_page_idx >= page_index && page_index < MOVEMENT_NUM_FACES) {
+        return;
     }
+
+    movement_state.tertiary_page_idx = page_index;
 }
 
 void movement_schedule_background_task(watch_date_time_t date_time) {
