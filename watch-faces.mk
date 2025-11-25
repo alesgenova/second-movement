@@ -58,4 +58,5 @@ SRCS += \
   ./watch-faces/complication/lander_face.c \
   ./watch-faces/complication/simon_face.c \
   ./watch-faces/settings/tunes_face.c \
+  ./watch-faces/complication/step_counter_face.c \
 # New watch faces go above this line.
