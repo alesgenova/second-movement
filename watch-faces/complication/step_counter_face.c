@@ -149,8 +149,8 @@ bool step_counter_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ACTIVATE:
             if (!movement_has_lis2dw()) {  // Skip this face if no accelerometer was seen on start-up
-                movement_move_to_next_face();
-                return false;
+                movement_move_to_next_page();
+                return true;
             }
             logger_state->display_index = logger_state->data_points;
             logger_state->sec_inactivity = 1;

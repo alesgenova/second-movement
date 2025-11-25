@@ -468,7 +468,7 @@ static bool _monitor_loop(movement_event_t event, void *context)
     switch (event.event_type) {
         case EVENT_ACTIVATE:
             if (!movement_has_lis2dw()) {  // Skip the lis2dw isn't installed
-                movement_move_to_next_face();
+                movement_move_to_next_page();
                 return false;
             }
 
