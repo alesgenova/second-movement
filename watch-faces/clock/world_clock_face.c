@@ -235,7 +235,7 @@ static bool _world_clock_face_do_settings_mode(movement_event_t event, world_clo
     bool is_custom_lcd;
 
     switch (event.event_type) {
-        case EVENT_MODE_BUTTON_UP:
+        case EVENT_MODE_BUTTON_DOWN:
             persist_world_clock_settings(state);
             movement_move_to_next_face();
             return false;

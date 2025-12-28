@@ -43,7 +43,7 @@ bool character_set_face_loop(movement_event_t event, void *context) {
     char *c = (char *)context;
     char buf[11];
     switch (event.event_type) {
-        case EVENT_ALARM_BUTTON_UP:
+        case EVENT_ALARM_BUTTON_DOWN:
             *c = (*c) + 1;
             if (*c & 0x80) *c = ' ';
             // fall through

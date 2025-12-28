@@ -280,6 +280,8 @@ bool nanosec_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TICK:
             break;
+        case EVENT_MODE_BUTTON_DOWN:
+            break;
         case EVENT_MODE_BUTTON_UP:
             if (nanosec_screen == 0) { // we can exit face only on the 0th page
                 nanosec_ui_save();

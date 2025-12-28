@@ -188,10 +188,6 @@ bool wareki_loop(movement_event_t event, void *context) {
         case EVENT_ACTIVATE:
             draw_wareki_splash(state);
             break;
-        case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
-            break;
-
         case EVENT_LOW_ENERGY_UPDATE:
         case EVENT_TICK:          
 

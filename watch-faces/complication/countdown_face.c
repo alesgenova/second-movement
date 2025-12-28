@@ -74,10 +74,10 @@ static void schedule_countdown(countdown_state_t *state) {
 
     // Calculate the new state->now_ts but don't update it until we've updated the target - 
     // avoid possible race where the old target is compared to the new time and immediately triggers
-    uint32_t new_now = watch_utility_date_time_to_unix_time(movement_get_utc_date_time(), movement_get_current_timezone_offset());
+    uint32_t new_now = watch_utility_date_time_to_unix_time(movement_get_utc_date_time(), 0);
     state->target_ts = watch_utility_offset_timestamp(new_now, state->hours, state->minutes, state->seconds);
     state->now_ts = new_now;
-    watch_date_time_t target_dt = watch_utility_date_time_from_unix_time(state->target_ts, movement_get_current_timezone_offset());
+    watch_date_time_t target_dt = watch_utility_date_time_from_unix_time(state->target_ts, 0);
     movement_schedule_background_task_for_face(state->watch_face_index, target_dt);
 }
 
@@ -209,7 +209,7 @@ void countdown_face_activate(void *context) {
     countdown_state_t *state = (countdown_state_t *)context;
     if(state->mode == cd_running) {
         watch_date_time_t now = movement_get_utc_date_time();
-        state->now_ts = watch_utility_date_time_to_unix_time(now, movement_get_current_timezone_offset());
+        state->now_ts = watch_utility_date_time_to_unix_time(now, 0);
         watch_set_indicator(WATCH_INDICATOR_SIGNAL);
     }
     watch_set_colon();
@@ -251,10 +251,6 @@ bool countdown_face_loop(movement_event_t event, void *context) {
             }
 
             draw(state, event.subsecond);
-            break;
-        case EVENT_MODE_BUTTON_UP:
-            abort_quick_ticks(state);
-            movement_move_to_next_face();
             break;
         case EVENT_LIGHT_BUTTON_UP:
             switch(state->mode) {

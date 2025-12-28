@@ -546,6 +546,8 @@ bool periodic_table_face_loop(movement_event_t event, void *context)
             movement_illuminate_led();
         }
         break;
+    case EVENT_MODE_BUTTON_DOWN:
+        break;
     case EVENT_MODE_BUTTON_UP:
         if (state->mode == SCREEN_TITLE) movement_move_to_next_face();
         else {
