@@ -131,6 +131,8 @@ int8_t _movement_dst_offset_cache[NUM_ZONE_NAMES] = {0};
 void cb_mode_btn_interrupt(void);
 void cb_light_btn_interrupt(void);
 void cb_alarm_btn_interrupt(void);
+void cb_mode_btn_extwake(void);
+void cb_light_btn_extwake(void);
 void cb_alarm_btn_extwake(void);
 void cb_minute_alarm_fired(void);
 void cb_tick(void);
@@ -555,6 +557,9 @@ void movement_request_sleep(void) {
 void movement_request_wake() {
     movement_volatile_state.exit_sleep_mode = true;
     _movement_reset_inactivity_countdown();
+#if __EMSCRIPTEN__
+    _wake_up_simulator();
+#endif
 }
 
 void cb_buzzer_start(void) {
@@ -1041,6 +1046,8 @@ void app_init(void) {
 
     // set up the 1 minute alarm (for background tasks and low power updates)
     _movement_set_top_of_minute_alarm();
+
+    watch_enable_external_interrupts();
 }
 
 void app_wake_from_backup(void) {
@@ -1079,9 +1086,6 @@ void app_setup(void) {
     watch_enable_display();
 
     if (!movement_volatile_state.is_sleeping) {
-        watch_disable_extwake_interrupt(HAL_GPIO_BTN_ALARM_pin());
-
-        watch_enable_external_interrupts();
         watch_register_interrupt_callback(HAL_GPIO_BTN_MODE_pin(), cb_mode_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
         watch_register_interrupt_callback(HAL_GPIO_BTN_LIGHT_pin(), cb_light_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
         watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_interrupt, INTERRUPT_TRIGGER_BOTH);
@@ -1329,7 +1333,9 @@ bool app_loop(void) {
         // No need to fire resign and sleep interrupts while in sleep mode
         _movement_disable_inactivity_countdown();
 
-        watch_register_extwake_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_extwake, true);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_MODE_pin(), cb_mode_btn_extwake, INTERRUPT_TRIGGER_RISING);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_LIGHT_pin(), cb_light_btn_extwake, INTERRUPT_TRIGGER_RISING);
+        watch_register_interrupt_callback(HAL_GPIO_BTN_ALARM_pin(), cb_alarm_btn_extwake, INTERRUPT_TRIGGER_RISING);
 
         // _sleep_mode_app_loop takes over at this point and loops until exit_sleep_mode is set by the extwake handler,
         // or wake is requested using the movement_request_wake function.
@@ -1506,9 +1512,19 @@ void cb_sleep_timeout_interrupt(void) {
     movement_request_sleep();
 }
 
-void cb_alarm_btn_extwake(void) {
-    // wake up!
+void cb_mode_btn_extwake(void) {
     movement_request_wake();
+    cb_mode_btn_interrupt();
+}
+
+void cb_light_btn_extwake(void) {
+    movement_request_wake();
+    cb_light_btn_interrupt();
+}
+
+void cb_alarm_btn_extwake(void) {
+    movement_request_wake();
+    cb_alarm_btn_interrupt();
 }
 
 void cb_minute_alarm_fired(void) {
