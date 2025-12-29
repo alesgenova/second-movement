@@ -129,8 +129,12 @@ static void _advanced_alarm_face_draw(alarm_state_t *state, uint8_t subsecond) {
         }
         // draw beep rounds indicator
         if ((subsecond % 2) == 0 || (state->setting_state != alarm_setting_idx_beeps)) {
-            if (state->alarm[state->alarm_idx].beeps == ALARM_MAX_BEEP_ROUNDS - 1)
+            if (state->alarm[state->alarm_idx].beeps == 10) {
                 watch_display_character('L', _beeps_blink_idx);
+            }
+            else if (state->alarm[state->alarm_idx].beeps == ALARM_MAX_BEEP_ROUNDS - 1) {
+                watch_display_character('C', _beeps_blink_idx);
+            }
             else {
                 if (state->alarm[state->alarm_idx].beeps == 0)
                     watch_display_character('o', _beeps_blink_idx);
@@ -445,7 +449,11 @@ bool advanced_alarm_face_loop(movement_event_t event, void *context) {
         if (state->alarm[state->alarm_playing_idx].beeps == 0) {
             // short beep
             _alarm_play_short_beep(state->alarm[state->alarm_playing_idx].pitch);
-        } else {
+        } else if (state->alarm[state->alarm_playing_idx].beeps == (ALARM_MAX_BEEP_ROUNDS - 1)) {
+            // alarm considering tunes_face alarm selection
+            movement_play_alarm();
+        }
+        else {
             // regular alarm beeps
             movement_play_alarm_beeps((state->alarm[state->alarm_playing_idx].beeps == (ALARM_MAX_BEEP_ROUNDS - 1) ? 20 : state->alarm[state->alarm_playing_idx].beeps), 
                                   _buzzer_notes[state->alarm[state->alarm_playing_idx].pitch]);

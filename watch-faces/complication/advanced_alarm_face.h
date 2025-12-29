@@ -62,14 +62,14 @@
 #define ALARM_DAY_ONE_TIME 8
 #define ALARM_DAY_WORKDAY 9
 #define ALARM_DAY_WEEKEND 10
-#define ALARM_MAX_BEEP_ROUNDS 11 // maximum number of beeping rounds for an alarm slot (including short and long alarms)
+#define ALARM_MAX_BEEP_ROUNDS 12 // maximum number of beeping rounds for an alarm slot (including short and long alarms)
 #define ALARM_SETTING_STATES 6
 
 typedef struct {
     uint8_t day : 4;    // day of week: 0=MO, 1=TU, 2=WE, 3=TH, 4=FR, 5=SA, 6=SU, 7=each day, 8=one time alarm, 9=Weekdays, 10=Weekend
     uint8_t hour : 5;
     uint8_t minute : 6;
-    uint8_t beeps : 4;
+    uint8_t beeps : 5;
     uint8_t pitch :2;
     bool enabled : 1;
 } alarm_setting_t;
