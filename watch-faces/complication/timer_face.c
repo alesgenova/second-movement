@@ -95,6 +95,9 @@ static void _draw(timer_state_t *state, uint8_t subsecond) {
             } else if (state->settings_state == 5) {
                 sprintf(bottom_time, " LOOP%c", state->timers[state->current_timer].unit.repeat ? 'y' : 'n');
                 watch_clear_colon();
+            } else if (state->settings_state == 6) {
+                sprintf(bottom_time, " TUNE%c", state->timers[state->current_timer].unit.custom_tune ? 'y' : 'n');
+                watch_clear_colon();
             } else {
                 sprintf(bottom_time, "%02u%02u%02u", state->timers[state->current_timer].unit.hours,
                         state->timers[state->current_timer].unit.minutes,
@@ -114,7 +117,7 @@ static void _draw(timer_state_t *state, uint8_t subsecond) {
     if (state->mode == setting && subsecond % 2) {
         // blink the current settings value
         if (state->settings_state == 0) timer_id[0] = timer_id[1] = ' ';
-        else if (state->settings_state == 1 || state->settings_state == 5) bottom_time[5] = ' ';
+        else if (state->settings_state == 1 || state->settings_state == 5 || state->settings_state == 6) bottom_time[5] = ' ';
         else bottom_time[(state->settings_state - 1) * 2 - 2] = bottom_time[(state->settings_state - 1) * 2 - 1] = ' ';
     }
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, bottom_time, bottom_time);
@@ -167,6 +170,9 @@ static void _settings_increment(timer_state_t *state) {
             break;
         case 5:
             state->timers[state->current_timer].unit.repeat ^= 1;
+            break;
+        case 6:
+            state->timers[state->current_timer].unit.custom_tune ^= 1;
             break;
         default:
             // should never happen
@@ -247,9 +253,9 @@ bool timer_face_loop(movement_event_t event, void *context) {
                         state->timers[state->current_timer].value = 0;
                         state->erase_timer_flag = false;
                     }
-                    state->settings_state = (state->settings_state + 1) % 6;
+                    state->settings_state = (state->settings_state + 1) % 7;
                     if (state->settings_state == 1 && state->timers[state->current_timer].value == 0) state->settings_state = 2;
-                    else if (state->settings_state == 5 && (state->timers[state->current_timer].value & 0xFFFFFF) == 0) state->settings_state = 0;
+                    else if (state->settings_state == 6 && (state->timers[state->current_timer].value & 0xFFFFFF) == 0) state->settings_state = 0;
                     break;
                 default:
                     break;
@@ -301,8 +307,12 @@ bool timer_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_BACKGROUND_TASK:
             // play the alarm
-            _beeps_to_play = 4;
-            watch_buzzer_play_sequence((int8_t *)_sound_seq_beep, _signal_callback);
+            if (state->timers[state->current_timer].unit.custom_tune) {
+                movement_play_alarm();
+            } else {
+                _beeps_to_play = 4;
+                watch_buzzer_play_sequence((int8_t *)_sound_seq_beep, _signal_callback);
+            }
             _reset(state);
             if (state->timers[state->current_timer].unit.repeat) _start(state, false);
             break;
