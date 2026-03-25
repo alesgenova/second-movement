@@ -147,7 +147,7 @@ static uint8_t _closest_deadline(deadline_state_t *state)
 static void _background_alarm_play(deadline_state_t *state)
 {
     movement_play_alarm();
-    movement_move_to_face(state->face_idx);
+    movement_move_to_page(movement_face_to_page(state->face_idx));
 }
 
 /* Reset deadline to tomorrow */
@@ -338,7 +338,7 @@ static bool _deadline_running_loop(movement_event_t event, void *context)
             state->mode = DEADLINE_SETTINGS;
             break;
         case EVENT_MODE_BUTTON_UP:
-            movement_move_to_next_face();
+            movement_move_to_next_page();
             return false;
         case EVENT_LIGHT_BUTTON_DOWN:
             break;
@@ -348,7 +348,7 @@ static bool _deadline_running_loop(movement_event_t event, void *context)
             _deadline_running_display(event, state);
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         case EVENT_BACKGROUND_TASK:
             _background_alarm_play(state);
@@ -476,7 +476,7 @@ static bool _deadline_settings_loop(movement_event_t event, void *context)
             _beep(BEEP_BUTTON);
             _change_tick_freq(1, state);
             state->mode = DEADLINE_RUNNING;
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         case EVENT_MODE_BUTTON_UP:
             _beep(BEEP_DISABLE);

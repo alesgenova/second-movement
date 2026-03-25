@@ -166,7 +166,7 @@ bool alarm_face_loop(movement_event_t event, void *context) {
                 // 2022-07-23: Thx @joeycastillo for the dedicated “alarm” signal
             break;
         case EVENT_TIMEOUT:
-            movement_move_to_face(0);
+            movement_move_to_page(0);
             break;
         case EVENT_LOW_ENERGY_UPDATE:
             break;

@@ -94,7 +94,7 @@ bool accelerometer_status_face_loop(movement_event_t event, void *context) {
                 state->is_setting = false;
                 break;
             case EVENT_TIMEOUT:
-                movement_move_to_face(0);
+                movement_move_to_page(0);
                 break;
             default:
                 movement_default_loop_handler(event);
