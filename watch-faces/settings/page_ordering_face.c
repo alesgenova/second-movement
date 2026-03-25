@@ -373,7 +373,9 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             state->tick_tock = !state->tick_tock;
             break;
         case EVENT_ALARM_BUTTON_UP:
-            watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
+            if (movement_button_should_sound()) {
+                movement_play_note(BUZZER_NOTE_C7, 40);
+            }
             if( state->reordering)
                 _page_ordering(state, +1);
             else
@@ -383,13 +385,19 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (state->reordering) {
                 state->pending_secondary_face = true;
                 state->pending_tertiary_face = false;
-                watch_buzzer_play_note(BUZZER_NOTE_C6, 40);
+                if (movement_button_should_sound()) {
+                    movement_play_note(BUZZER_NOTE_C6, 40);
+                }
             } else {
                 if( !state->protected ) {
-                    watch_buzzer_play_note(BUZZER_NOTE_C4, 50);
+                    if (movement_button_should_sound()) {
+                        movement_play_note(BUZZER_NOTE_C4, 50);
+                    }
                     _page_ordering_face_toggle_page(state);
                 } else {
-                    watch_buzzer_play_note(BUZZER_NOTE_C3, 50);
+                    if (movement_button_should_sound()) {
+                        movement_play_note(BUZZER_NOTE_C3, 50);
+                    }
                 }
             }
             break;
@@ -397,11 +405,12 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (state->reordering) {
                 state->pending_secondary_face = false;
                 state->pending_tertiary_face = true;
-                watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
+                if (movement_button_should_sound()) {
+                    movement_play_note(BUZZER_NOTE_C7, 40);
+                }
             }
             break;
         case EVENT_LIGHT_LONG_UP:
-        case EVENT_LIGHT_REALLY_LONG_UP:
             if (state->reordering && (state->pending_secondary_face || state->pending_tertiary_face)) {
                 _page_ordering_commit_secondary_or_tertiary_face(state);
                 state->reordering = false;
@@ -411,7 +420,9 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             if (movement_led_stay_off()) {
                 movement_force_led_off();
             }
-            watch_buzzer_play_note(BUZZER_NOTE_C7, 40);
+            if (movement_button_should_sound()) {
+                movement_play_note(BUZZER_NOTE_C7, 40);
+            }
             if( state->reordering)
                 _page_ordering(state, -1);
             else
@@ -425,10 +436,14 @@ bool page_ordering_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ALARM_LONG_PRESS:
             if (!state->reordering) {
-                watch_buzzer_play_note(BUZZER_NOTE_C7, 70);
+                if (movement_button_should_sound()) {
+                    movement_play_note(BUZZER_NOTE_C7, 70);
+                }
                 movement_request_tick_frequency(4);
             } else {
-                watch_buzzer_play_note(BUZZER_NOTE_C5, 70);
+                if (movement_button_should_sound()) {
+                    movement_play_note(BUZZER_NOTE_C5, 70);
+                }
                 movement_request_tick_frequency(1);
             }
             state->reordering = !state->reordering;
