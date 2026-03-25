@@ -35,14 +35,17 @@
     F(fast_stopwatch) \
     F(countdown) \
     F(sunrise_sunset) \
+    F(solar_time) \
     F(moon_phase)
 
 #define SECONDARY_FACES(F) \
     F(totp_lfs) \
+    F(tomato) \
     F(tunes) \
     F(probability) \
     F(wordle) \
-    F(counter)
+    F(counter) \
+    F(tennis)
 
 #define TERTIARY_FACES(F) \
     F(settings) \
