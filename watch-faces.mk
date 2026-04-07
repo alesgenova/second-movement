@@ -62,4 +62,5 @@ SRCS += \
   ./watch-faces/clock/solar_time_face.c \
   ./watch-faces/complication/tide_face.c \
   ./watch-faces/settings/tunes_face.c \
+  ./watch-faces/complication/tennis_face.c \
 # New watch faces go above this line.
