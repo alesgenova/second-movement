@@ -89,4 +89,5 @@
 #include "hydration_face.h"
 #include "tunes_face.h"
 #include "page_ordering_face.h"
+#include "tennis_face.h"
 // New includes go above this line.
