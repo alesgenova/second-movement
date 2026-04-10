@@ -504,7 +504,7 @@ bool tennis_face_loop(movement_event_t event, void *context) {
                     _tennis_update_display(state);
                     break;
                 case EVENT_TIMEOUT:
-                    movement_move_to_face(0);
+                    movement_move_to_page(0);
                     break;
                 default:
                     return movement_default_loop_handler(event);
@@ -639,7 +639,7 @@ bool tennis_face_loop(movement_event_t event, void *context) {
                     _tennis_update_display(state);
                     break;
                 case EVENT_TIMEOUT:
-                    movement_move_to_face(0);
+                    movement_move_to_page(0);
                     break;
                 case EVENT_LOW_ENERGY_UPDATE:
                     _tennis_update_display(state);
