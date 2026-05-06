@@ -324,7 +324,7 @@ static bool _clock_loop(movement_event_t event, world_clock2_state_t *state)
         _clock_display(event, state);
         break;
     case EVENT_LIGHT_BUTTON_DOWN:
-        /* Do nothing. No light. */
+        movement_illuminate_led();
         break;
     case EVENT_LIGHT_BUTTON_UP:
         refresh_face = true;
@@ -388,7 +388,7 @@ static bool _settings_loop(movement_event_t event, world_clock2_state_t *state)
         _settings_display(event, state);
         break;
     case EVENT_LIGHT_BUTTON_DOWN:
-        /* Do nothing. No light. */
+        movement_illuminate_led();
         break;
     case EVENT_ALARM_LONG_PRESS:
         /* Toggle selection of current zone */
