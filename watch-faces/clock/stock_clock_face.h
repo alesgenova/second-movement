@@ -60,11 +60,11 @@ typedef struct
     bool timer_active;
     uint32_t timer_target_timestamp;
 
-    // Stopwatch fields
-    bool stopwatch_mode;              // true when in stopwatch mode, false when in clock mode
-    rtc_counter_t alarm_down_counter; // rtc counter when alarm button was pressed down
-    rtc_counter_t start_counter;      // rtc counter when the stopwatch was started
-    rtc_counter_t lap_counter;        // rtc counter when the stopwatch was lapped
+    // Stopwatch/timer fields
+    bool stopwatch_mode;              // true when displaying stopwatch
+    bool timer_mode;                  // true when displaying quick timer (entered from stopwatch long press)
+    rtc_counter_t alarm_down_counter; // rtc counter when alarm button was first pressed down
+    rtc_counter_t start_counter;      // rtc counter when timing began (set at alarm button down)
     rtc_counter_t stop_counter;       // rtc counter when the stopwatch was stopped
     uint8_t stopwatch_status;         // the status the stopwatch is in (idle, running, stopped)
     bool slow_refresh;                // update the display slowly (same 128Hz timekeeping accuracy)

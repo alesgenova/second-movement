@@ -55,9 +55,7 @@ typedef enum
 {
     SW_STATUS_IDLE = 0,
     SW_STATUS_RUNNING,
-    SW_STATUS_RUNNING_LAPPING,
     SW_STATUS_STOPPED,
-    SW_STATUS_STOPPED_LAPPING
 } stopwatch_status_t;
 
 // How quickly should the elapsing time be displayed?
@@ -141,49 +139,19 @@ static void _display_elapsed(stock_clock_state_t *state, uint32_t ticks)
 
 static void _draw_stopwatch_indicators(stock_clock_state_t *state, movement_event_t event, uint32_t elapsed)
 {
-    uint8_t subsecond;
-    bool tock;
+    (void)event;
 
     switch (state->stopwatch_status)
     {
     case SW_STATUS_RUNNING:
-        subsecond = elapsed & 127;
-        tock = subsecond >= 64;
-
+    {
+        uint8_t subsecond = elapsed & 127;
+        bool tock = subsecond >= 64;
         watch_clear_indicator(WATCH_INDICATOR_LAP);
-        if (tock)
-        {
-            watch_clear_colon();
-        }
-        else
-        {
-            watch_set_colon();
-        }
-
+        if (tock) watch_clear_colon();
+        else watch_set_colon();
         return;
-
-    case SW_STATUS_RUNNING_LAPPING:
-        tock = event.subsecond > 0;
-
-        if (tock)
-        {
-            watch_clear_indicator(WATCH_INDICATOR_LAP);
-            watch_clear_colon();
-        }
-        else
-        {
-            watch_set_indicator(WATCH_INDICATOR_LAP);
-            watch_set_colon();
-        }
-
-        return;
-
-    case SW_STATUS_STOPPED_LAPPING:
-        watch_set_indicator(WATCH_INDICATOR_LAP);
-        watch_set_colon();
-
-        return;
-
+    }
     case SW_STATUS_STOPPED:
     case SW_STATUS_IDLE:
     default:
@@ -206,8 +174,6 @@ static uint8_t get_stopwatch_refresh_rate(stock_clock_state_t *state)
         {
             return DISPLAY_RUNNING_RATE;
         }
-    case SW_STATUS_RUNNING_LAPPING:
-        return 2;
     case SW_STATUS_STOPPED:
     case SW_STATUS_IDLE:
     default:
@@ -215,75 +181,30 @@ static uint8_t get_stopwatch_refresh_rate(stock_clock_state_t *state)
     }
 }
 
+static void stopwatch_reset_to_clock(stock_clock_state_t *state)
+{
+    state->stopwatch_status = SW_STATUS_IDLE;
+    state->stopwatch_mode = false;
+    state->timer_mode = false;
+    state->start_counter = 0;
+    state->stop_counter = 0;
+    state->alarm_down_counter = 0;
+    state->date_time.previous.reg = 0xFFFFFFFF;
+    movement_request_tick_frequency(1);
+}
+
 static void stopwatch_state_transition(stock_clock_state_t *state, rtc_counter_t counter, movement_event_type_t event_type)
 {
     switch (state->stopwatch_status)
     {
-    case SW_STATUS_IDLE:
-        switch (event_type)
-        {
-        case EVENT_ALARM_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_RUNNING;
-            state->start_counter = counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        case EVENT_LIGHT_LONG_PRESS:
-            state->slow_refresh = !state->slow_refresh;
-            return;
-        default:
-            return;
-        }
-
     case SW_STATUS_RUNNING:
         switch (event_type)
         {
-        case EVENT_ALARM_BUTTON_DOWN:
+        case EVENT_LIGHT_BUTTON_DOWN:
+            // First light press: stop the stopwatch
             state->stopwatch_status = SW_STATUS_STOPPED;
             state->stop_counter = counter;
             movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        case EVENT_LIGHT_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_RUNNING_LAPPING;
-            state->lap_counter = counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        default:
-            return;
-        }
-
-    case SW_STATUS_RUNNING_LAPPING:
-        switch (event_type)
-        {
-        case EVENT_ALARM_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_STOPPED_LAPPING;
-            state->stop_counter = counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        case EVENT_LIGHT_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_RUNNING;
-            state->lap_counter = counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        case EVENT_LIGHT_LONG_PRESS:
-            state->stopwatch_status = SW_STATUS_RUNNING;
-            state->slow_refresh = !state->slow_refresh;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        default:
-            return;
-        }
-
-    case SW_STATUS_STOPPED_LAPPING:
-        switch (event_type)
-        {
-        case EVENT_ALARM_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_RUNNING_LAPPING;
-            state->start_counter = counter - state->stop_counter + state->start_counter;
-            state->lap_counter = counter - state->stop_counter + state->lap_counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
-        case EVENT_LIGHT_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_STOPPED;
             return;
         default:
             return;
@@ -292,21 +213,9 @@ static void stopwatch_state_transition(stock_clock_state_t *state, rtc_counter_t
     case SW_STATUS_STOPPED:
         switch (event_type)
         {
-        case EVENT_ALARM_BUTTON_DOWN:
-            state->stopwatch_status = SW_STATUS_RUNNING;
-            state->start_counter = counter - state->stop_counter + state->start_counter;
-            movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-            return;
         case EVENT_LIGHT_BUTTON_DOWN:
-            // Reset stopwatch - return to clock mode
-            state->stopwatch_status = SW_STATUS_IDLE;
-            state->stopwatch_mode = false;
-            state->start_counter = 0;
-            state->stop_counter = 0;
-            state->lap_counter = 0;
-            // Force full re-draw of clock
-            state->date_time.previous.reg = 0xFFFFFFFF;
-            movement_request_tick_frequency(1);
+            // Second light press: reset and return to clock
+            stopwatch_reset_to_clock(state);
             return;
         default:
             return;
@@ -326,10 +235,6 @@ static uint32_t stopwatch_elapsed_time(stock_clock_state_t *state, rtc_counter_t
 
     case SW_STATUS_RUNNING:
         return counter - state->start_counter;
-
-    case SW_STATUS_RUNNING_LAPPING:
-    case SW_STATUS_STOPPED_LAPPING:
-        return state->lap_counter - state->start_counter;
 
     case SW_STATUS_STOPPED:
         return state->stop_counter - state->start_counter;
@@ -500,6 +405,19 @@ static void clock_reset_quick_timer(stock_clock_state_t *state, watch_date_time_
     clock_enable_quick_timer(state, now + (current_quick_timer) * 60);
 }
 
+static void clock_start_timer_from_counter(stock_clock_state_t *state, rtc_counter_t start_counter)
+{
+    // Convert RTC counter start time to a UTC timestamp by subtracting elapsed seconds
+    uint32_t now = movement_get_utc_timestamp();
+    rtc_counter_t now_counter = watch_rtc_get_counter();
+    uint32_t elapsed_seconds = (now_counter - start_counter) >> 7; // 128 Hz ticks to seconds
+    uint32_t start_utc = now - elapsed_seconds;
+
+    uint8_t minutes = QUICK_TIMERS[0];
+    current_quick_timer = minutes;
+    clock_enable_quick_timer(state, start_utc + (uint32_t)minutes * 60);
+}
+
 static watch_date_time_t clock_24h_to_12h(watch_date_time_t date_time)
 {
     date_time.unit.hour %= 12;
@@ -664,12 +582,12 @@ void stock_clock_face_setup(uint8_t watch_face_index, void **context_ptr)
         state->timer_active = false;
         state->timer_target_timestamp = 0;
 
-        // Initialize stopwatch fields
+        // Initialize stopwatch/timer fields
         state->stopwatch_mode = false;
+        state->timer_mode = false;
         state->alarm_down_counter = 0;
         state->start_counter = 0;
         state->stop_counter = 0;
-        state->lap_counter = 0;
         state->stopwatch_status = SW_STATUS_IDLE;
         state->slow_refresh = false;
         state->old_display.seconds = UINT_MAX;
@@ -718,46 +636,53 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
     {
         rtc_counter_t counter = watch_rtc_get_counter();
 
-        stopwatch_state_transition(state, counter, event.event_type);
-        rtc_counter_t elapsed = stopwatch_elapsed_time(state, counter);
-
         switch (event.event_type)
         {
-        case EVENT_ACTIVATE:
-            watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "STW", "ST");
-            _draw_stopwatch_indicators(state, event, elapsed);
-            _display_elapsed(state, elapsed);
+        case EVENT_ALARM_LONG_PRESS:
+            // Long press alarm in stopwatch mode: switch to timer mode
+            _button_beep();
+            state->stopwatch_mode = false;
+            state->timer_mode = true;
+            clock_start_timer_from_counter(state, state->start_counter);
+            stock_clock_face_activate(context);
+            current = movement_get_local_date_time();
+            clock_display_quick_timer(state, current, false);
+            return true;
+        case EVENT_LIGHT_BUTTON_DOWN:
+            movement_illuminate_led();
+            // Stop or reset
+            stopwatch_state_transition(state, counter, event.event_type);
+            _button_beep();
+            if (!state->stopwatch_mode)
+            {
+                // Returned to clock mode after reset
+                stock_clock_face_activate(context);
+                current = movement_get_local_date_time();
+                clock_display_clock(state, current);
+                state->date_time.previous = current;
+                return true;
+            }
             break;
         case EVENT_LIGHT_BUTTON_UP:
         case EVENT_LIGHT_LONG_UP:
             if (movement_led_stay_off()) {
                 movement_force_led_off();
             }
-            break;
-        case EVENT_LIGHT_BUTTON_DOWN:
-            movement_illuminate_led();
-        case EVENT_ALARM_BUTTON_DOWN:
-        case EVENT_LIGHT_LONG_PRESS:
-            _button_beep();
-            // Fall through
-        case EVENT_TICK:
-            _draw_stopwatch_indicators(state, event, elapsed);
-            _display_elapsed(state, elapsed);
-
-            // Check if we've returned to clock mode
-            if (!state->stopwatch_mode)
-            {
-                // Reactivate to show clock
-                stock_clock_face_activate(context);
-                current = movement_get_local_date_time();
-                clock_display_clock(state, current);
-                state->date_time.previous = current;
-            }
+            return true;
+        case EVENT_ACTIVATE:
+            watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "STW", "ST");
             break;
         default:
-            movement_default_loop_handler(event);
+            if (event.event_type != EVENT_TICK) {
+                movement_default_loop_handler(event);
+                return true;
+            }
             break;
         }
+
+        rtc_counter_t elapsed = stopwatch_elapsed_time(state, counter);
+        _draw_stopwatch_indicators(state, event, elapsed);
+        _display_elapsed(state, elapsed);
 
         return true;
     }
@@ -770,52 +695,55 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
         clock_display_low_energy(movement_get_local_date_time());
         break;
     case EVENT_ALARM_BUTTON_DOWN:
-        if (state->timer_active)
+        if (state->timer_mode)
         {
+            // In timer mode: short press cycles timer lengths
             current = movement_get_local_date_time();
             clock_increase_quick_timer(state, current);
+            if (!state->timer_active)
+                state->timer_mode = false;
             clock_display_quick_timer(state, current, false);
             _button_beep();
         }
-        else
+        else if (!state->alarm_down_counter)
         {
-            // Record the time when alarm button is pressed
+            // Start timing silently from this moment
             state->alarm_down_counter = watch_rtc_get_counter();
+            state->start_counter = state->alarm_down_counter;
         }
         break;
     case EVENT_ALARM_BUTTON_UP:
-        if (!state->timer_active)
+        state->alarm_down_counter = 0;
+
+        // Short press does nothing visible (timing runs silently in background)
+        break;
+    case EVENT_ALARM_LONG_PRESS:
+        if (state->timer_mode)
         {
-            // Switch to stopwatch mode, starting from the time recorded at button down
+            // Long press in timer mode: reset timer and return to clock
+            _button_beep();
+            clock_disable_quick_timer(state);
+            current_quick_timer = 0;
+            state->timer_mode = false;
+            stopwatch_reset_to_clock(state);
+            stock_clock_face_activate(context);
+        }
+        else if (state->alarm_down_counter)
+        {
+            // Long press enters stopwatch mode, showing elapsed since button-down
+            _button_beep();
             state->stopwatch_mode = true;
             state->stopwatch_status = SW_STATUS_RUNNING;
-            state->start_counter = state->alarm_down_counter;
             state->old_display.seconds = UINT_MAX;
             state->old_display.minutes = UINT_MAX;
             state->old_display.hours = UINT_MAX;
             movement_request_tick_frequency(get_stopwatch_refresh_rate(state));
-
-            // Display stopwatch immediately
             watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "STW", "ST");
             rtc_counter_t counter = watch_rtc_get_counter();
             rtc_counter_t elapsed = stopwatch_elapsed_time(state, counter);
             _draw_stopwatch_indicators(state, event, elapsed);
             _display_elapsed(state, elapsed);
-            _button_beep();
         }
-        break;
-    case EVENT_ALARM_LONG_PRESS:
-        current = movement_get_local_date_time();
-        if (state->timer_active)
-        {
-            clock_disable_quick_timer(state);
-        }
-        else
-        {
-            clock_increase_quick_timer(state, current);
-        }
-        clock_display_quick_timer(state, current, false);
-        _button_beep();
         break;
     case EVENT_LIGHT_LONG_PRESS:
         if (state->timer_active)
@@ -849,6 +777,7 @@ bool stock_clock_face_loop(movement_event_t event, void *context)
         movement_play_alarm();
         current = movement_get_local_date_time();
         clock_disable_quick_timer(state);
+        state->timer_mode = false;
         clock_display_quick_timer(state, current, false);
         break;
     default:
