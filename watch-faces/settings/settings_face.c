@@ -26,6 +26,22 @@
 #include "settings_face.h"
 #include "watch.h"
 
+#define SETTINGS_PAGE_QUIET_HOURS_START 2
+#define SETTINGS_PAGE_QUIET_HOURS_END 3
+
+static bool _quick_ticks_running;
+
+static bool _is_quiet_hours_page(int8_t page) {
+    return page == SETTINGS_PAGE_QUIET_HOURS_START || page == SETTINGS_PAGE_QUIET_HOURS_END;
+}
+
+static void _abort_quick_ticks(void) {
+    if (_quick_ticks_running) {
+        _quick_ticks_running = false;
+        movement_request_tick_frequency(4);
+    }
+}
+
 static void clock_setting_display(uint8_t subsecond) {
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "CLOCK", "CL");
     if (subsecond % 2) {
@@ -42,7 +58,7 @@ static void beep_setting_display(uint8_t subsecond) {
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "BTN", "BT");
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "beep  ", " beep ");
     if (subsecond % 2) {
-        if (movement_button_should_sound()) {
+        if (movement_button_sound_setting_enabled()) {
             if (movement_button_volume() == WATCH_BUZZER_VOLUME_LOUD) {
                 // H for HIGH
                 watch_display_text(WATCH_POSITION_TOP_RIGHT, " H");
@@ -59,7 +75,7 @@ static void beep_setting_display(uint8_t subsecond) {
 }
 
 static void beep_setting_advance(void) {
-    if (!movement_button_should_sound()) {
+    if (!movement_button_sound_setting_enabled()) {
         // was muted. make it soft.
         movement_set_button_should_sound(true);
         movement_set_button_volume(WATCH_BUZZER_VOLUME_SOFT);
@@ -75,6 +91,54 @@ static void beep_setting_advance(void) {
         movement_set_button_should_sound(false);
         beep_setting_display(1);
     }
+}
+
+static void quiet_hours_start_setting_display(uint8_t subsecond) {
+    char buf[8];
+    uint8_t quiet_start = movement_get_button_quiet_hours_start();
+    uint8_t quiet_end = movement_get_button_quiet_hours_end();
+
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "QIE", "QU");
+    if (quiet_start == quiet_end) {
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, "tN");
+    } else {
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, "tY");
+    }
+
+    snprintf(buf, sizeof(buf), "%02uto%02u", (unsigned)(quiet_start % 24), (unsigned)(quiet_end % 24));
+    if (subsecond % 2 && !_quick_ticks_running) {
+        buf[0] = ' ';
+        buf[1] = ' ';
+    }
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
+}
+
+static void quiet_hours_start_setting_advance(void) {
+    movement_set_button_quiet_hours_start(movement_get_button_quiet_hours_start() + 1);
+}
+
+static void quiet_hours_end_setting_display(uint8_t subsecond) {
+    char buf[8];
+    uint8_t quiet_start = movement_get_button_quiet_hours_start();
+    uint8_t quiet_end = movement_get_button_quiet_hours_end();
+
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "QIE", "QU");
+    if (quiet_start == quiet_end) {
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, "tN");
+    } else {
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, "tY");
+    }
+
+    snprintf(buf, sizeof(buf), "%02uto%02u", (unsigned)(quiet_start % 24), (unsigned)(quiet_end % 24));
+    if (subsecond % 2 && !_quick_ticks_running) {
+        buf[4] = ' ';
+        buf[5] = ' ';
+    }
+    watch_display_text(WATCH_POSITION_BOTTOM, buf);
+}
+
+static void quiet_hours_end_setting_advance(void) {
+    movement_set_button_quiet_hours_end(movement_get_button_quiet_hours_end() + 1);
 }
 
 static void signal_setting_display(uint8_t subsecond) {
@@ -293,7 +357,10 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         settings_state_t *state = (settings_state_t *)*context_ptr;
         int8_t current_setting = 0;
 
-        state->num_settings = 7; // baseline, without LED settings
+        state->num_settings = 8; // baseline, without low energy, LED color, and optional build hash.
+#ifndef MOVEMENT_LOW_ENERGY_MODE_FORBIDDEN
+        state->num_settings++;
+#endif
 #ifdef BUILD_GIT_HASH
         state->num_settings++;
 #endif
@@ -313,6 +380,12 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         current_setting++;
         state->settings_screens[current_setting].display = beep_setting_display;
         state->settings_screens[current_setting].advance = beep_setting_advance;
+        current_setting++;
+        state->settings_screens[current_setting].display = quiet_hours_start_setting_display;
+        state->settings_screens[current_setting].advance = quiet_hours_start_setting_advance;
+        current_setting++;
+        state->settings_screens[current_setting].display = quiet_hours_end_setting_display;
+        state->settings_screens[current_setting].advance = quiet_hours_end_setting_advance;
         current_setting++;
         state->settings_screens[current_setting].display = signal_setting_display;
         state->settings_screens[current_setting].advance = signal_setting_advance;
@@ -368,6 +441,7 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
 void settings_face_activate(void *context) {
     settings_state_t *state = (settings_state_t *)context;
     state->current_page = 0;
+    _quick_ticks_running = false;
     movement_request_tick_frequency(4); // we need to manually blink some pixels
 }
 
@@ -375,18 +449,41 @@ bool settings_face_loop(movement_event_t event, void *context) {
     settings_state_t *state = (settings_state_t *)context;
 
     switch (event.event_type) {
+        case EVENT_TICK:
+            if (_quick_ticks_running) {
+                if (HAL_GPIO_BTN_ALARM_read()) {
+                    state->settings_screens[state->current_page].advance();
+                } else {
+                    _abort_quick_ticks();
+                }
+            }
+            watch_clear_display();
+            state->settings_screens[state->current_page].display(event.subsecond);
+            break;
+        case EVENT_ALARM_LONG_PRESS:
+            if (_is_quiet_hours_page(state->current_page)) {
+                _quick_ticks_running = true;
+                movement_request_tick_frequency(8);
+                break;
+            }
+            return movement_default_loop_handler(event);
+        case EVENT_ALARM_LONG_UP:
+            _abort_quick_ticks();
+            break;
         case EVENT_LIGHT_BUTTON_DOWN:
+            _abort_quick_ticks();
             state->current_page = (state->current_page + 1) % state->num_settings;
             // fall through
-        case EVENT_TICK:
         case EVENT_ACTIVATE:
             watch_clear_display();
             state->settings_screens[state->current_page].display(event.subsecond);
             break;
         case EVENT_ALARM_BUTTON_DOWN:
+            _abort_quick_ticks();
             state->settings_screens[state->current_page].advance();
             break;
         case EVENT_TIMEOUT:
+            _abort_quick_ticks();
             movement_move_to_page(0);
             break;
         default:
@@ -408,6 +505,7 @@ bool settings_face_loop(movement_event_t event, void *context) {
 
 void settings_face_resign(void *context) {
     (void) context;
+    _abort_quick_ticks();
     movement_force_led_off();
     movement_store_settings();
 }

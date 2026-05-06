@@ -303,6 +303,10 @@ typedef struct {
     // signal and alarm volumes
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
+
+    // quiet-hours window for button beeps, local time [0, 23].
+    uint8_t button_quiet_hours_start;
+    uint8_t button_quiet_hours_end;
 } movement_state_t;
 
 void movement_move_to_page(uint8_t page_index);
@@ -374,7 +378,12 @@ void movement_set_local_date_time(watch_date_time_t date_time);
 void movement_set_utc_timestamp(uint32_t timestamp);
 
 bool movement_button_should_sound(void);
+bool movement_button_sound_setting_enabled(void);
 void movement_set_button_should_sound(bool value);
+uint8_t movement_get_button_quiet_hours_start(void);
+void movement_set_button_quiet_hours_start(uint8_t value);
+uint8_t movement_get_button_quiet_hours_end(void);
+void movement_set_button_quiet_hours_end(uint8_t value);
 
 watch_buzzer_volume_t movement_button_volume(void);
 void movement_set_button_volume(watch_buzzer_volume_t value);

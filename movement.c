@@ -97,6 +97,13 @@ const uint32_t _movement_mode_button_events_mask = 0b11111 << EVENT_MODE_BUTTON_
 const uint32_t _movement_light_button_events_mask = 0b11111 << EVENT_LIGHT_BUTTON_DOWN;
 const uint32_t _movement_alarm_button_events_mask = 0b11111 << EVENT_ALARM_BUTTON_DOWN;
 const uint32_t _movement_button_events_mask = _movement_mode_button_events_mask | _movement_light_button_events_mask | _movement_alarm_button_events_mask;
+char _movement_button_quiet_hours_filename[] = "button_quiet_hours.u8";
+
+typedef struct {
+    uint8_t version;
+    uint8_t start_hour;
+    uint8_t end_hour;
+} movement_button_quiet_hours_t;
 
 typedef struct {
     movement_event_type_t down_event;
@@ -202,6 +209,23 @@ static watch_buzzer_volume_t _movement_get_buzzer_volume(movement_buzzer_priorit
         default:
             return WATCH_BUZZER_VOLUME_LOUD;
     }
+}
+
+static bool _movement_button_sound_quiet_hours_active(void) {
+    uint8_t quiet_start = movement_get_button_quiet_hours_start();
+    uint8_t quiet_end = movement_get_button_quiet_hours_end();
+
+    // If start == end, quiet-hours are disabled.
+    if (quiet_start == quiet_end) return false;
+
+    uint8_t hour = movement_get_local_date_time().unit.hour;
+    if (quiet_start < quiet_end) {
+        // Quiet period fully inside the day, e.g. 10:00 - 14:00
+        return (hour >= quiet_start) && (hour < quiet_end);
+    }
+
+    // Quiet period wraps overnight, e.g. 20:00 - 08:00
+    return (hour >= quiet_start) || (hour < quiet_end);
 }
 
 static void _movement_set_top_of_minute_alarm() {
@@ -870,11 +894,31 @@ void movement_set_utc_timestamp(uint32_t timestamp) {
 
 
 bool movement_button_should_sound(void) {
+    return movement_button_sound_setting_enabled() && !_movement_button_sound_quiet_hours_active();
+}
+
+bool movement_button_sound_setting_enabled(void) {
     return movement_state.settings.bit.button_should_sound;
 }
 
 void movement_set_button_should_sound(bool value) {
     movement_state.settings.bit.button_should_sound = value;
+}
+
+uint8_t movement_get_button_quiet_hours_start(void) {
+    return movement_state.button_quiet_hours_start;
+}
+
+void movement_set_button_quiet_hours_start(uint8_t value) {
+    movement_state.button_quiet_hours_start = value % 24;
+}
+
+uint8_t movement_get_button_quiet_hours_end(void) {
+    return movement_state.button_quiet_hours_end;
+}
+
+void movement_set_button_quiet_hours_end(uint8_t value) {
+    movement_state.button_quiet_hours_end = value % 24;
 }
 
 watch_buzzer_volume_t movement_button_volume(void) {
@@ -955,10 +999,43 @@ void movement_set_backlight_dwell(uint8_t value) {
 }
 
 void movement_store_settings(void) {
+    bool write_settings = true;
     movement_settings_t old_settings;
-    filesystem_read_file("settings.u32", (char *)&old_settings, sizeof(movement_settings_t));
-    if (movement_state.settings.reg != old_settings.reg) {
+    if (filesystem_file_exists("settings.u32")) {
+        filesystem_read_file("settings.u32", (char *)&old_settings, sizeof(movement_settings_t));
+        write_settings = movement_state.settings.reg != old_settings.reg;
+    }
+
+    if (write_settings) {
         filesystem_write_file("settings.u32", (char *)&movement_state.settings, sizeof(movement_settings_t));
+    }
+
+    movement_button_quiet_hours_t old_quiet_hours;
+    movement_button_quiet_hours_t quiet_hours = {
+        .version = 0,
+        .start_hour = movement_get_button_quiet_hours_start(),
+        .end_hour = movement_get_button_quiet_hours_end()
+    };
+
+    bool write_quiet_hours = true;
+    if (filesystem_file_exists(_movement_button_quiet_hours_filename)) {
+        filesystem_read_file(
+            _movement_button_quiet_hours_filename,
+            (char *)&old_quiet_hours,
+            sizeof(movement_button_quiet_hours_t)
+        );
+
+        write_quiet_hours = old_quiet_hours.version != 0
+            || old_quiet_hours.start_hour != quiet_hours.start_hour
+            || old_quiet_hours.end_hour != quiet_hours.end_hour;
+    }
+
+    if (write_quiet_hours) {
+        filesystem_write_file(
+            _movement_button_quiet_hours_filename,
+            (char *)&quiet_hours,
+            sizeof(movement_button_quiet_hours_t)
+        );
     }
 }
 
@@ -1118,10 +1195,12 @@ void app_init(void) {
     movement_volatile_state.alarm_button.cb_longpress = cb_alarm_btn_timeout_interrupt;
 
     movement_state.has_thermistor = thermistor_driver_init();
+    movement_set_button_quiet_hours_start(MOVEMENT_DEFAULT_BUTTON_QUIET_HOURS_START);
+    movement_set_button_quiet_hours_end(MOVEMENT_DEFAULT_BUTTON_QUIET_HOURS_END);
 
     bool settings_file_exists = filesystem_file_exists("settings.u32");
-    movement_settings_t maybe_settings;
-    if (settings_file_exists && maybe_settings.bit.version == 0) {
+    movement_settings_t maybe_settings = { .reg = 0 };
+    if (settings_file_exists) {
         filesystem_read_file("settings.u32", (char *) &maybe_settings, sizeof(movement_settings_t));
     }
 
@@ -1161,6 +1240,22 @@ void app_init(void) {
 #endif
         movement_state.settings.bit.led_duration = MOVEMENT_DEFAULT_LED_DURATION;
 
+        movement_store_settings();
+    }
+
+    if (filesystem_file_exists(_movement_button_quiet_hours_filename)) {
+        movement_button_quiet_hours_t quiet_hours;
+        filesystem_read_file(
+            _movement_button_quiet_hours_filename,
+            (char *)&quiet_hours,
+            sizeof(movement_button_quiet_hours_t)
+        );
+
+        if (quiet_hours.version == 0) {
+            movement_set_button_quiet_hours_start(quiet_hours.start_hour);
+            movement_set_button_quiet_hours_end(quiet_hours.end_hour);
+        }
+    } else {
         movement_store_settings();
     }
 
@@ -1374,7 +1469,7 @@ static bool _switch_face(void) {
     watch_clear_display();
     movement_request_tick_frequency(1);
 
-    if (movement_state.settings.bit.button_should_sound) {
+    if (movement_button_should_sound()) {
         // low note for nonzero case, high note for return to watch_face 0
         uint8_t home_page = _movement_find_first_enabled_page(0);
         movement_play_note(movement_state.next_page_idx == home_page ? BUZZER_NOTE_C8 : BUZZER_NOTE_C7, 50);

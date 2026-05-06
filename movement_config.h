@@ -31,10 +31,9 @@
 
 #define FOREACH_PRIMARY_FACE(F) \
     F(stock_clock_face)         \
-    F(page_ordering_face)      \
     F(world_clock2_face)        \
     F(sunrise_sunset_face)      \
-    F(moon_phase_face)          \
+    F(astronomy_rise_face)      \
     F(fast_stopwatch_face)      \
     F(countdown_face)
 
@@ -45,12 +44,14 @@
     F(probability_face)
 
 #define FOREACH_TERTIARY_FACE(F)    \
-    F(settings_face)                \
     F(set_time_face)                \
+    F(settings_face)                \
+    F(page_ordering_face)      \
     F(temperature_display_face)     \
-    F(voltage_face)                 \
-    F(finetune_face)                \
-    F(nanosec_face)
+    F(voltage_face)
+
+//    F(finetune_face)                \
+//    F(nanosec_face)
 
 
 
@@ -72,6 +73,12 @@
 #define MOVEMENT_DEFAULT_BUTTON_VOLUME WATCH_BUZZER_VOLUME_SOFT
 #define MOVEMENT_DEFAULT_SIGNAL_VOLUME WATCH_BUZZER_VOLUME_LOUD
 #define MOVEMENT_DEFAULT_ALARM_VOLUME WATCH_BUZZER_VOLUME_LOUD
+
+/* Button beep quiet-hours window (local time, 24h clock).
+ * Default behavior is quiet from 20:00 to 08:00.
+ */
+#define MOVEMENT_DEFAULT_BUTTON_QUIET_HOURS_START 20
+#define MOVEMENT_DEFAULT_BUTTON_QUIET_HOURS_END 8
 
 /* Set the timeout before switching back to the main watch face
  * Valid values are:
