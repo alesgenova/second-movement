@@ -22,6 +22,71 @@
  * SOFTWARE.
  */
 
+/*
+ * File outline
+ *
+ * Body metadata and lookup:
+ * - _astronomy_rise_body_index:                      Map an astronomy body constant to its table index.
+ *
+ * Constellations and observer location:
+ * - _astronomy_rise_constellation:                  Convert right ascension to a constellation table entry.
+ * - _astronomy_rise_get_location:                   Load the current preset latitude and longitude.
+ *
+ * Time and geometry helpers:
+ * - _astronomy_rise_compute_rise_set:              Estimate rise and set times from RA/Dec and observer position.
+ * - _astronomy_rise_to_unix:                       Convert a watch date-time to a Unix timestamp.
+ * - _astronomy_rise_from_unix:                     Convert a Unix timestamp back to a watch date-time.
+ * - _astronomy_rise_local_to_utc:                  Reinterpret a local time as its UTC equivalent.
+ * - _astronomy_rise_shift_days_utc:                Move a UTC date-time forward or backward by whole days.
+ * - _astronomy_rise_local_noon:                    Build a local date-time pinned to 12:00 noon.
+ * - _astronomy_rise_wrap_angle_pm_pi:              Wrap an angle into the [-pi, pi] range.
+ * - _astronomy_rise_wrap_angle_0_2pi:              Wrap an angle into the [0, 2pi) range.
+ * - _astronomy_rise_radec_to_unit_vector:          Convert right ascension and declination to XYZ.
+ * - _astronomy_rise_unit_vector_to_radec:          Convert an XYZ direction back to RA/Dec.
+ * - _astronomy_rise_max_motion_deg_per_hour:       Return a conservative drift rate for a body.
+ * - _astronomy_rise_prediction_window_days:        Return how far cached linear prediction may be trusted.
+ * - _astronomy_rise_cache_ttl_seconds:             Compute cache lifetime for a body's noon coordinates.
+ * - _astronomy_rise_julian_from_local:             Convert a local watch time to a Julian date.
+ * - _astronomy_rise_hours_ut_to_local:             Turn UTC fractional hours on a date into local wall time.
+ * - _astronomy_rise_next_two_sun_events:           Find the next two sunrise or sunset events after now.
+ *
+ * Cache and recalculation:
+ * - _astronomy_rise_get_noon_radec_cached:         Fetch or predict noon RA/Dec and refresh the cache.
+ * - _astronomy_rise_cache_fresh_for_body_on_date:  Check whether one body's cache is fresh for a date.
+ * - _astronomy_rise_cache_fresh_for_summary:       Check whether summary mode can reuse cached body data.
+ * - _astronomy_rise_refresh_recalc_mask:           Mark which summary bodies still need recalculation.
+ * - _astronomy_rise_recalculate_body:              Recompute one body without changing the user's selection.
+ * - _astronomy_rise_recalculate:                   Run the full input, model, and state update pipeline.
+ *
+ * Model pipeline:
+ * - _astronomy_rise_build_model_input:             Gather current body, time, timezone, and location inputs.
+ * - _astronomy_rise_compute_model:                 Compute altitude, rise/set, phase, and constellation outputs.
+ * - _astronomy_rise_apply_model_output:            Copy computed model results back into face state.
+ *
+ * Display helpers and render modes:
+ * - _astronomy_rise_display_body_name:             Paint the active body's label across the top row.
+ * - _astronomy_rise_display_time:                  Paint a rise/set time with labels and tomorrow indicator.
+ * - _astronomy_rise_render_summary:                Draw the summary screen with visibility letters and sun timing.
+ * - _astronomy_rise_render_selecting_body:         Draw the body-selection prompt while browsing objects.
+ * - _astronomy_rise_render_calculating:            Show recalculation progress and process pending bodies.
+ * - _astronomy_rise_render_status:                 Draw the shared circumpolar "always up" status view.
+ * - _astronomy_rise_render_not_rising:             Draw the shared "never rises" status view.
+ * - _astronomy_rise_render_rise:                   Draw the rise-time view or an edge-case status instead.
+ * - _astronomy_rise_render_set:                    Draw the set-time view or an edge-case status instead.
+ * - _astronomy_rise_render_constellation:          Draw the active body's current constellation name.
+ * - _astronomy_rise_render_overview:               Draw a compact overview of phase and event telemetry.
+ * - _astronomy_rise_render_sun_angle:              Draw the Sun-object angle with a trend marker.
+ * - _astronomy_rise_render_face_lit:               Draw illuminated-face percent with a trend marker.
+ * - _astronomy_rise_render_display_mode:           Dispatch to the active display-mode renderer.
+ *
+ * Watch face lifecycle:
+ * - _astronomy_rise_update:                        Refresh the screen for the current mode and state.
+ * - astronomy_rise_face_setup:                     Allocate and zero the persistent face state.
+ * - astronomy_rise_face_activate:                  Handle face activation with no extra setup required.
+ * - astronomy_rise_face_loop:                      Process button, tick, and timeout events for the face.
+ * - astronomy_rise_face_resign:                    Reset mode flags when leaving the face.
+ */
+
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -33,44 +98,42 @@
 #include "sunriset.h"
 #include "astro_trig.h"
 
-#define NUM_AVAILABLE_BODIES ASTRONOMY_RISE_NUM_BODIES
-#define _location_count (sizeof(longLatPresets) / sizeof(long_lat_presets_t))
-#define _recalc_valid_mask ((uint8_t)((1u << NUM_AVAILABLE_BODIES) - 1u))
-static const uint8_t _summary_bodies[5] = {1, 3, 4, 5, 6}; // Venus, Mars, Jupiter, Saturn, Sun
-
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-static const char astronomy_rise_bodies[NUM_AVAILABLE_BODIES] = {
-    ASTRO_BODY_MERCURY,
-    ASTRO_BODY_VENUS,
-    ASTRO_BODY_MOON,
-    ASTRO_BODY_MARS,
-    ASTRO_BODY_JUPITER,
-    ASTRO_BODY_SATURN,
-    ASTRO_BODY_SUN,
+#define NUM_AVAILABLE_BODIES ASTRONOMY_RISE_NUM_BODIES
+#define _location_count (sizeof(longLatPresets) / sizeof(long_lat_presets_t))
+#define _recalc_valid_mask ((uint8_t)((1u << NUM_AVAILABLE_BODIES) - 1u))
+
+typedef struct {
+    char body;
+    char short_name[5];
+    char long_name[6];
+    char summary_letter;
+    bool include_in_summary_recalc;
+    float max_motion_deg_per_hour;
+    float prediction_window_days;
+    uint32_t fixed_ttl_seconds;
+} astronomy_rise_body_info_t;
+
+static const astronomy_rise_body_info_t astronomy_rise_body_info[NUM_AVAILABLE_BODIES] = {
+    // body,              short, long,    letter sum?   recalc, max mo, pred window
+    { ASTRO_BODY_MERCURY, "MERC", "Mercu", '\0', false, 0.12f, 3.0f,  24u * 3600u },
+    { ASTRO_BODY_VENUS,   "VEnu", "Venus", 'V',  true,  0.08f, 3.0f,  24u * 3600u },
+    { ASTRO_BODY_MOON,    "MOOn", "Moon ", '\0', false, 0.70f, 1.0f,  0u },
+    { ASTRO_BODY_MARS,    "MArS", "Mars ", 'M',  true,  0.04f, 5.0f,  24u * 3600u },
+    { ASTRO_BODY_JUPITER, "JuPt", "Jupit", 'J',  true,  0.01f, 30.0f, 0u },
+    { ASTRO_BODY_SATURN,  "SAtu", "Satur", 'S',  true,  0.005f,45.0f, 0u },
+    { ASTRO_BODY_SUN,     "SUN ", "Sun  ", '\0', true,  0.05f, 7.0f,  0u },
 };
 
-static const char astronomy_rise_body_names[NUM_AVAILABLE_BODIES][4] = {
-    "MERC",
-    "VEnu",
-    "MOOn",
-    "MArS",
-    "JuPt",
-    "SAtu",
-    "SUN ",
-};
-
-static const char astronomy_rise_body_names_long[NUM_AVAILABLE_BODIES][5] = {
-    "Mercu",
-    "Venus",
-    "Moon ",
-    "Mars ",
-    "Jupit",
-    "Satur",
-    "Sun  ",
-};
+static uint8_t _astronomy_rise_body_index(char body) {
+    for (uint8_t i = 0; i < NUM_AVAILABLE_BODIES; i++) {
+        if (astronomy_rise_body_info[i].body == body) return i;
+    }
+    return 0;
+}
 
 typedef struct { float ra_start; const char name[7]; } constellation_entry_t;
 typedef struct {
@@ -101,32 +164,46 @@ static void _astronomy_rise_recalculate(astronomy_rise_state_t *state);
 
 // Ecliptic constellations ordered by RA start (hours). Covers full 0-24h circle.
 static const constellation_entry_t _constellations[] = {
-    {  0.0f, "Pisces" },
-    {  1.9f, "Aries " },
-    {  3.3f, "Taurus" },
-    {  5.7f, "Gemini" },
-    {  7.5f, "Cancer" },
-    {  9.1f, "Leo   " },
-    { 11.6f, "Virgo " },
-    { 14.3f, "Libra " },
-    { 15.8f, "Scorpi" },
-    { 16.5f, "Ophiuc" },
-    { 17.9f, "Sagitt" },
-    { 20.1f, "Capric" },
-    { 21.7f, "Aquari" },
-    { 23.3f, "Pisces" },
+    {  0.0f / 12.0 * M_PI, "Pisces" },
+    {  1.9f / 12.0 * M_PI, "Aries " },
+    {  3.3f / 12.0 * M_PI, "Taurus" },
+    {  5.7f / 12.0 * M_PI, "Gemini" },
+    {  7.5f / 12.0 * M_PI, "Cancer" },
+    {  9.1f / 12.0 * M_PI, "Leo   " },
+    { 11.6f / 12.0 * M_PI, "Virgo " },
+    { 14.3f / 12.0 * M_PI, "Libra " },
+    { 15.8f / 12.0 * M_PI, "Scorpi" },
+    { 16.5f / 12.0 * M_PI, "Ophiuc" },
+    { 17.9f / 12.0 * M_PI, "Sagitt" },
+    { 20.1f / 12.0 * M_PI, "Capric" },
+    { 21.7f / 12.0 * M_PI, "Aquari" },
+    { 23.3f / 12.0 * M_PI, "Pisces" },
 };
-#define NUM_CONSTELLATIONS ((uint8_t)(sizeof(_constellations) / sizeof(_constellations[0])))
+
+#define QUICK_IN_RANGE(r, range) { \
+    while (r < 0) r += range; \
+    while (r >= (range)) r -= range; \
+}
+
+const uint8_t NUM_CONSTELLATIONS = (sizeof(_constellations) / sizeof(_constellations[0])) ;
 
 static uint8_t _astronomy_rise_constellation(float ra_rad) {
-    float ra_hours = ra_rad * 12.0 / M_PI;  // radians to hours (0-24)
-    if (ra_hours < 0) ra_hours += 24.0;
-    // Find last entry whose ra_start <= ra_hours
-    uint8_t idx = 0;
-    for (uint8_t i = 1; i < NUM_CONSTELLATIONS; i++) {
-        if (ra_hours >= _constellations[i].ra_start) idx = i;
-        else break;
-    }
+    const float two_pi = 2.0 * M_PI;
+    const float bin_size = 24.0 / (NUM_CONSTELLATIONS-1) / (12.0 / M_PI) ;
+
+    QUICK_IN_RANGE(ra_rad, two_pi);
+
+    uint8_t idx = (ra_rad / bin_size); // seed guess
+
+    while (
+        (idx > 0) &&
+        (_constellations[idx].ra_start > ra_rad)
+    ) idx--;
+    while (
+        (idx < NUM_CONSTELLATIONS - 1 ) &&
+        (_constellations[idx + 1].ra_start <= ra_rad)
+    ) idx++;
+
     return idx;
 }
 
@@ -135,12 +212,11 @@ static bool _astronomy_rise_get_location(float *lat, float *lon) {
     if (preset_index >= _location_count)
         return false;
     movement_location_t loc;
-    loc.bit.latitude  = longLatPresets[preset_index].latitude;
-    loc.bit.longitude = longLatPresets[preset_index].longitude;
-    if (loc.reg == 0)
-        return false;
-    *lat = (float)(int16_t)loc.bit.latitude  / 100.0;
-    *lon = (float)(int16_t)loc.bit.longitude / 100.0;
+    if( (longLatPresets[preset_index].latitude  == 0 ) &&
+        (longLatPresets[preset_index].longitude == 0 )    )
+        return false ;
+    *lat = (float)(int16_t)longLatPresets[preset_index].latitude  / 100.0f;
+    *lon = (float)(int16_t)longLatPresets[preset_index].longitude / 100.0f;
     return true;
 }
 
@@ -188,18 +264,15 @@ static bool _astronomy_rise_compute_rise_set(float ra_rad, float dec_rad, float 
     float transit_ut = ra_hours - gmst0_hours - lon_deg / 15.0;
 
     // Normalize to [0, 24)
-    while (transit_ut < 0)   transit_ut += 24.0;
-    while (transit_ut >= 24) transit_ut -= 24.0;
+    QUICK_IN_RANGE(transit_ut, 24.0);
 
     float H_hours = H / 15.0;
 
     *rise_ut = transit_ut - H_hours;
     *set_ut  = transit_ut + H_hours;
 
-    while (*rise_ut < 0)   *rise_ut += 24.0;
-    while (*rise_ut >= 24) *rise_ut -= 24.0;
-    while (*set_ut < 0)    *set_ut  += 24.0;
-    while (*set_ut >= 24)  *set_ut  -= 24.0;
+    QUICK_IN_RANGE(*rise_ut, 24.0);
+    QUICK_IN_RANGE(*set_ut, 24.0);
 
     return true;
 }
@@ -239,8 +312,7 @@ static float _astronomy_rise_wrap_angle_pm_pi(float x) {
 }
 
 static float _astronomy_rise_wrap_angle_0_2pi(float x) {
-    while (x < 0.0f) x += (float)(2.0 * M_PI);
-    while (x >= (float)(2.0 * M_PI)) x -= (float)(2.0 * M_PI);
+    QUICK_IN_RANGE(x, (float)(2.0 * M_PI));
     return x;
 }
 
@@ -271,39 +343,19 @@ static void _astronomy_rise_unit_vector_to_radec(float x, float y, float z, floa
 static float _astronomy_rise_max_motion_deg_per_hour(uint8_t body_index) {
     // Conservative max apparent geocentric drift rates against stars.
     // Used for cache validity, not for rendering.
-    switch (astronomy_rise_bodies[body_index]) {
-        case ASTRO_BODY_MOON:    return 0.70f;   // ~16.8 deg/day
-        case ASTRO_BODY_MERCURY: return 0.12f;   // ~2.9 deg/day
-        case ASTRO_BODY_VENUS:   return 0.08f;   // ~1.9 deg/day
-        case ASTRO_BODY_SUN:     return 0.05f;   // ~1.2 deg/day
-        case ASTRO_BODY_MARS:    return 0.04f;   // ~1.0 deg/day
-        case ASTRO_BODY_JUPITER: return 0.01f;   // ~0.24 deg/day
-        case ASTRO_BODY_SATURN:  return 0.005f;  // ~0.12 deg/day
-        default:                 return 0.05f;
-    }
+    float value = astronomy_rise_body_info[body_index].max_motion_deg_per_hour;
+    return value > 0.0f ? value : 0.05f;
 }
 
 static float _astronomy_rise_prediction_window_days(uint8_t body_index) {
-    switch (astronomy_rise_bodies[body_index]) {
-        case ASTRO_BODY_MOON:    return 1.0f;
-        case ASTRO_BODY_MERCURY: return 3.0f;
-        case ASTRO_BODY_VENUS:   return 3.0f;
-        case ASTRO_BODY_MARS:    return 5.0f;
-        case ASTRO_BODY_SUN:     return 7.0f;
-        case ASTRO_BODY_JUPITER: return 30.0f;
-        case ASTRO_BODY_SATURN:  return 45.0f;
-        default:                 return 5.0f;
-    }
+    float value = astronomy_rise_body_info[body_index].prediction_window_days;
+    return value > 0.0f ? value : 5.0f;
 }
 
 static uint32_t _astronomy_rise_cache_ttl_seconds(uint8_t body_index) {
-    switch (astronomy_rise_bodies[body_index]) {
-        case ASTRO_BODY_MERCURY:
-        case ASTRO_BODY_VENUS:
-        case ASTRO_BODY_MARS:
-            return 24 * 3600;  // daily recalc for inner planets
-        default:
-            break;
+    uint32_t fixed_ttl_seconds = astronomy_rise_body_info[body_index].fixed_ttl_seconds;
+    if (fixed_ttl_seconds > 0) {
+        return fixed_ttl_seconds;
     }
 
     const float max_allowed_drift_deg = 2.0f;
@@ -474,7 +526,7 @@ static astro_equatorial_coordinates_t _astronomy_rise_get_noon_radec_cached(
     float old_vy = cache->vy;
     float old_vz = cache->vz;
     astro_equatorial_coordinates_t radec_noon = astro_get_ra_dec(
-        jd_noon, astronomy_rise_bodies[input->active_body_index], lat_r, lon_r, false);
+        jd_noon, astronomy_rise_body_info[input->active_body_index].body, lat_r, lon_r, false);
     float new_vx, new_vy, new_vz;
     _astronomy_rise_radec_to_unit_vector(radec_noon.right_ascension, radec_noon.declination, &new_vx, &new_vy, &new_vz);
 
@@ -544,8 +596,8 @@ static void _astronomy_rise_refresh_recalc_mask(astronomy_rise_state_t *state) {
     int32_t tz = movement_get_current_timezone_offset();
     uint8_t mask = 0;
     uint8_t count = 0;
-    for (uint8_t i = 0; i < (uint8_t)(sizeof(_summary_bodies) / sizeof(_summary_bodies[0])); i++) {
-        uint8_t body_index = _summary_bodies[i];
+    for (uint8_t body_index = 0; body_index < NUM_AVAILABLE_BODIES; body_index++) {
+        if (!astronomy_rise_body_info[body_index].include_in_summary_recalc) continue;
         bool fresh = _astronomy_rise_cache_fresh_for_summary(state, body_index, &now, tz);
         if (!fresh) {
             mask |= (1 << body_index);
@@ -562,92 +614,6 @@ static bool _astronomy_rise_recalculate_body(astronomy_rise_state_t *state, uint
     _astronomy_rise_recalculate(state);
     state->active_body_index = old_body;
     return state->valid;
-}
-
-static void _astronomy_rise_render_summary(astronomy_rise_state_t *state) {
-    float lat, lon;
-    if (!_astronomy_rise_get_location(&lat, &lon)) {
-        watch_display_text_with_fallback(WATCH_POSITION_TOP, "Astro", "AS");
-        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
-        return;
-    }
-    watch_date_time_t now = movement_get_local_date_time();
-    int32_t tz = movement_get_current_timezone_offset();
-    double jd = _astronomy_rise_julian_from_local(now, tz);
-    float lat_r = astro_degrees_to_radians(lat);
-    float lon_r = astro_degrees_to_radians(lon);
-
-    const char summary_letters[4] = {'V', 'M', 'J', 'S'};
-    char left[3] = {' ', ' ', '\0'};
-    char right[3] = {' ', ' ', '\0'};
-    for (uint8_t i = 0; i < 4; i++) {
-        uint8_t idx = _summary_bodies[i];
-        const astronomy_rise_body_cache_t *cache = &state->body_cache[idx];
-        char ch = ' ';
-        if (!cache->valid) {
-            ch = ' ';
-        } else {
-            astro_horizontal_coordinates_t h = astro_ra_dec_to_alt_az(jd, lat_r, lon_r, cache->right_ascension, cache->declination);
-            ch = (h.altitude > 0) ? summary_letters[i] : '_';
-        }
-        if (i < 2) left[i] = ch;
-        else right[i - 2] = ch;
-    }
-    watch_set_colon();
-    watch_display_text(WATCH_POSITION_TOP_LEFT, left);
-    watch_display_text(WATCH_POSITION_TOP_RIGHT, right);
-
-    if (_astronomy_rise_recalculate_body(state, 6)) {
-        watch_date_time_t rise = state->rise_time;
-        watch_date_time_t set = state->set_time;
-        uint32_t rise_ts = _astronomy_rise_to_unix(rise, tz);
-        uint32_t set_ts = _astronomy_rise_to_unix(set, tz);
-        watch_date_time_t first = rise;
-        watch_date_time_t second = set;
-        if (set_ts < rise_ts) {
-            first = set;
-            second = rise;
-        }
-
-        watch_clear_indicator(WATCH_INDICATOR_PM);
-        watch_clear_indicator(WATCH_INDICATOR_24H);
-        int first_hour = first.unit.hour;
-        int second_hour = second.unit.hour;
-        if (movement_clock_mode_24h()) {
-            watch_set_indicator(WATCH_INDICATOR_24H);
-        } else {
-            watch_date_time_t t12_first = first;
-            if (watch_utility_convert_to_12_hour(&t12_first)) watch_set_indicator(WATCH_INDICATOR_PM);
-            first_hour = t12_first.unit.hour;
-            watch_date_time_t t12_second = second;
-            watch_utility_convert_to_12_hour(&t12_second);
-            second_hour = t12_second.unit.hour;
-        }
-        char hours[3];
-        char minutes[3];
-        char seconds[3];
-        snprintf(hours, sizeof hours, "%2d", first_hour);
-        snprintf(minutes, sizeof minutes, "%02d", first.unit.minute);
-        snprintf(seconds, sizeof seconds, "%02d", second_hour);
-        watch_display_text(WATCH_POSITION_HOURS, hours);
-        watch_display_text(WATCH_POSITION_MINUTES, minutes);
-        watch_display_text(WATCH_POSITION_SECONDS, seconds);
-    } else {
-        // Fallback so summary screen is never blank in time fields.
-        char selected[3] = {
-            astronomy_rise_body_names[state->active_body_index][0],
-            astronomy_rise_body_names[state->active_body_index][1],
-            '\0'
-        };
-        watch_display_text(WATCH_POSITION_SECONDS, selected);
-    }
-
-    _astronomy_rise_refresh_recalc_mask(state);
-    if (state->recalc_remaining > 0) {
-        char bottom[7];
-        snprintf(bottom, sizeof bottom, "Calc %d", state->recalc_remaining);
-        watch_display_text(WATCH_POSITION_BOTTOM, bottom);
-    }
 }
 
 static bool _astronomy_rise_build_model_input(const astronomy_rise_state_t *state, astronomy_rise_model_input_t *input) {
@@ -672,11 +638,11 @@ static void _astronomy_rise_compute_model(astronomy_rise_state_t *state, const a
     float lat_r = astro_degrees_to_radians(input->latitude_deg);
     float lon_r = astro_degrees_to_radians(input->longitude_deg);
 
-    astro_equatorial_coordinates_t radec_p = astro_get_ra_dec(jd, astronomy_rise_bodies[input->active_body_index], lat_r, lon_r, true);
+    astro_equatorial_coordinates_t radec_p = astro_get_ra_dec(jd, astronomy_rise_body_info[input->active_body_index].body, lat_r, lon_r, true);
     astro_horizontal_coordinates_t horiz = astro_ra_dec_to_alt_az(jd, lat_r, lon_r, radec_p.right_ascension, radec_p.declination);
     output->altitude_deg = astro_radians_to_degrees(horiz.altitude);
 
-    astro_equatorial_coordinates_t obj_now = astro_get_ra_dec(jd, astronomy_rise_bodies[input->active_body_index], lat_r, lon_r, false);
+    astro_equatorial_coordinates_t obj_now = astro_get_ra_dec(jd, astronomy_rise_body_info[input->active_body_index].body, lat_r, lon_r, false);
     astro_equatorial_coordinates_t sun_now = astro_get_ra_dec(jd, ASTRO_BODY_SUN, lat_r, lon_r, false);
     float cos_elong = astro_sinf(obj_now.declination) * astro_sinf(sun_now.declination) +
                       astro_cosf(obj_now.declination) * astro_cosf(sun_now.declination) * astro_cosf(obj_now.right_ascension - sun_now.right_ascension);
@@ -696,7 +662,7 @@ static void _astronomy_rise_compute_model(astronomy_rise_state_t *state, const a
         if (cos_phase < -1.0f) cos_phase = -1.0f;
         face_lit = 50.0f * (1.0f + cos_phase);
     }
-    if (astronomy_rise_bodies[input->active_body_index] == ASTRO_BODY_SUN) face_lit = 100.0f;
+    if (astronomy_rise_body_info[input->active_body_index].body == ASTRO_BODY_SUN) face_lit = 100.0f;
     if (face_lit < 0.0f) face_lit = 0.0f;
     if (face_lit > 100.0f) face_lit = 100.0f;
     output->face_lit_percent = face_lit;
@@ -705,7 +671,7 @@ static void _astronomy_rise_compute_model(astronomy_rise_state_t *state, const a
 
     // Current trend: compare now vs now+1h.
     double jd_next = jd + (1.0 / 24.0);
-    astro_equatorial_coordinates_t obj_next = astro_get_ra_dec(jd_next, astronomy_rise_bodies[input->active_body_index], lat_r, lon_r, false);
+    astro_equatorial_coordinates_t obj_next = astro_get_ra_dec(jd_next, astronomy_rise_body_info[input->active_body_index].body, lat_r, lon_r, false);
     astro_equatorial_coordinates_t sun_next = astro_get_ra_dec(jd_next, ASTRO_BODY_SUN, lat_r, lon_r, false);
     float cos_elong_next = astro_sinf(obj_next.declination) * astro_sinf(sun_next.declination) +
                            astro_cosf(obj_next.declination) * astro_cosf(sun_next.declination) * astro_cosf(obj_next.right_ascension - sun_next.right_ascension);
@@ -724,7 +690,7 @@ static void _astronomy_rise_compute_model(astronomy_rise_state_t *state, const a
         if (cos_phase_next < -1.0f) cos_phase_next = -1.0f;
         face_lit_next = 50.0f * (1.0f + cos_phase_next);
     }
-    if (astronomy_rise_bodies[input->active_body_index] == ASTRO_BODY_SUN) face_lit_next = 100.0f;
+    if (astronomy_rise_body_info[input->active_body_index].body == ASTRO_BODY_SUN) face_lit_next = 100.0f;
     if (face_lit_next < 0.0f) face_lit_next = 0.0f;
     if (face_lit_next > 100.0f) face_lit_next = 100.0f;
 
@@ -769,7 +735,7 @@ static void _astronomy_rise_compute_model(astronomy_rise_state_t *state, const a
 
     // Moon-only refinement: refine rise and set independently so one event
     // does not bias the other.
-    if (ok && astronomy_rise_bodies[input->active_body_index] == ASTRO_BODY_MOON) {
+    if (ok && astronomy_rise_body_info[input->active_body_index].body == ASTRO_BODY_MOON) {
         float rise_ut_refined = rise_ut;
         float set_ut_refined = set_ut;
 
@@ -846,13 +812,8 @@ static void _astronomy_rise_recalculate(astronomy_rise_state_t *state) {
 }
 
 static void _astronomy_rise_display_body_name(const char *name_long, const char *name_short) {
-    // name_long  = 5 chars: first 3 go to TOP_LEFT (custom), last 2 to TOP_RIGHT
-    // name_short = 4 chars: first 2 go to TOP_LEFT (classic), last 2 to TOP_RIGHT
-    char left_long[4]  = { name_long[0],  name_long[1],  name_long[2],  '\0' };
-    char left_short[3] = { name_short[0], name_short[1], '\0' };
-    char right[3]      = { name_long[3],  name_long[4],  '\0' };
-    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, left_long, left_short);
-    watch_display_text(WATCH_POSITION_TOP_RIGHT, right);
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, name_long, name_short);
+    watch_display_text(WATCH_POSITION_TOP_RIGHT, name_long + 3);
 }
 
 static void _astronomy_rise_display_time(watch_date_time_t t, const char *name_long, const char *name_short, const char *seconds_label, bool is_tomorrow) {
@@ -881,6 +842,127 @@ static void _astronomy_rise_display_time(watch_date_time_t t, const char *name_l
     watch_display_text(WATCH_POSITION_MINUTES, minbuf);
 }
 
+/*
+ * Render helpers:
+ * - Each helper paints one user-visible astronomy mode or status on the LCD.
+ * - Shared formatting (body labels, HH:MM layout, indicators) is centralized so
+ *   mode switches remain lightweight and visually consistent.
+ * - Render outline:
+ *   _astronomy_rise_render_summary: summary watch view with visible-body letters and sun timing.
+ *   _astronomy_rise_render_selecting_body: body-selection prompt/state.
+ *   _astronomy_rise_render_calculating: progress UI while refreshing cached body data.
+ *   _astronomy_rise_render_status: shared "always up" circumpolar status.
+ *   _astronomy_rise_render_not_rising: shared "never rises" status.
+ *   _astronomy_rise_render_rise: rise-time mode (or shared status fallback).
+ *   _astronomy_rise_render_set: set-time mode (or shared status fallback).
+ *   _astronomy_rise_render_constellation: current constellation for active body.
+ *   _astronomy_rise_render_overview: compact telemetry (phase, rise/set hour pair, sun angle).
+ *   _astronomy_rise_render_sun_angle: sun-angle metric with trend indicator.
+ *   _astronomy_rise_render_face_lit: illuminated-face percent with trend indicator.
+ *   _astronomy_rise_render_display_mode: dispatcher for active render mode + altitude indicator.
+ */
+/*
+ * Render watch-mode summary.
+ * Shows four tracked-body visibility markers split across top-left/top-right:
+ * each letter means body is above the horizon, '_' means below. If Sun data is
+ * available, HH:MM:SS is repurposed as first-event hour:first-event minute:
+ * second-event hour (rise/set order). Bottom row shows pending recalc count.
+ */
+static void _astronomy_rise_render_summary(astronomy_rise_state_t *state) {
+    float lat, lon;
+    if (!_astronomy_rise_get_location(&lat, &lon)) {
+        watch_display_text_with_fallback(WATCH_POSITION_TOP, "Astro", "AS");
+        watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "No LOC", "No Loc");
+        return;
+    }
+    watch_date_time_t now = movement_get_local_date_time();
+    int32_t tz = movement_get_current_timezone_offset();
+    double jd = _astronomy_rise_julian_from_local(now, tz);
+    float lat_r = astro_degrees_to_radians(lat);
+    float lon_r = astro_degrees_to_radians(lon);
+
+    uint8_t sun_index = _astronomy_rise_body_index(ASTRO_BODY_SUN);
+    char summary_letters[4] = {' ', ' ', ' ', ' '};
+    uint8_t summary_letter_count = 0;
+    char left[3] = {' ', ' ', '\0'};
+    char right[3] = {' ', ' ', '\0'};
+    for (uint8_t idx = 0; idx < NUM_AVAILABLE_BODIES; idx++) {
+        char letter = astronomy_rise_body_info[idx].summary_letter;
+        if (letter == '\0') continue;
+        if (summary_letter_count >= 4) break;
+
+        const astronomy_rise_body_cache_t *cache = &state->body_cache[idx];
+        char ch = ' ';
+        if (!cache->valid) {
+            ch = ' ';
+        } else {
+            astro_horizontal_coordinates_t h = astro_ra_dec_to_alt_az(jd, lat_r, lon_r, cache->right_ascension, cache->declination);
+            ch = (h.altitude > 0) ? letter : '_';
+        }
+        summary_letters[summary_letter_count++] = ch;
+    }
+
+    for (uint8_t i = 0; i < 4; i++) {
+        if (i < 2) left[i] = summary_letters[i];
+        else right[i - 2] = summary_letters[i];
+    }
+    watch_set_colon();
+    watch_display_text(WATCH_POSITION_TOP_LEFT, left);
+    watch_display_text(WATCH_POSITION_TOP_RIGHT, right);
+
+    if (_astronomy_rise_recalculate_body(state, sun_index)) {
+        watch_date_time_t rise = state->rise_time;
+        watch_date_time_t set = state->set_time;
+        uint32_t rise_ts = _astronomy_rise_to_unix(rise, tz);
+        uint32_t set_ts = _astronomy_rise_to_unix(set, tz);
+        watch_date_time_t first = rise;
+        watch_date_time_t second = set;
+        if (set_ts < rise_ts) {
+            first = set;
+            second = rise;
+        }
+
+        watch_clear_indicator(WATCH_INDICATOR_PM);
+        watch_clear_indicator(WATCH_INDICATOR_24H);
+        int first_hour = first.unit.hour;
+        int second_hour = second.unit.hour;
+        if (movement_clock_mode_24h()) {
+            watch_set_indicator(WATCH_INDICATOR_24H);
+        } else {
+            watch_date_time_t t12_first = first;
+            if (watch_utility_convert_to_12_hour(&t12_first)) watch_set_indicator(WATCH_INDICATOR_PM);
+            first_hour = t12_first.unit.hour;
+            watch_date_time_t t12_second = second;
+            watch_utility_convert_to_12_hour(&t12_second);
+            second_hour = t12_second.unit.hour;
+        }
+        char hours[3];
+        char minutes[3];
+        char seconds[3];
+        snprintf(hours, sizeof hours, "%2d", first_hour);
+        snprintf(minutes, sizeof minutes, "%02d", first.unit.minute);
+        snprintf(seconds, sizeof seconds, "%02d", second_hour);
+        watch_display_text(WATCH_POSITION_HOURS, hours);
+        watch_display_text(WATCH_POSITION_MINUTES, minutes);
+        watch_display_text(WATCH_POSITION_SECONDS, seconds);
+    } else {
+        // Fallback so summary screen is never blank in time fields.
+        watch_display_text(WATCH_POSITION_SECONDS, astronomy_rise_body_info[state->active_body_index].short_name);
+    }
+
+    _astronomy_rise_refresh_recalc_mask(state);
+    if (state->recalc_remaining > 0) {
+        char bottom[7];
+        snprintf(bottom, sizeof bottom, "Calc %d", state->recalc_remaining);
+        watch_display_text(WATCH_POSITION_BOTTOM, bottom);
+    }
+}
+
+/*
+ * Render body-selection idle screen.
+ * Clears transient indicators from previous modes, keeps body name visible on
+ * top row, and prints "Astro" on bottom as the selection/browse prompt.
+ */
 static void _astronomy_rise_render_selecting_body(const char *name_long, const char *name_short) {
     watch_clear_indicator(WATCH_INDICATOR_SIGNAL);
     watch_clear_indicator(WATCH_INDICATOR_LAP);
@@ -891,6 +973,12 @@ static void _astronomy_rise_render_selecting_body(const char *name_long, const c
     watch_display_text(WATCH_POSITION_BOTTOM, " Astro");
 }
 
+/*
+ * Render and run batch recalculation.
+ * Displays "Calc N" progress on the bottom row while iterating through the
+ * recalc bitmask, recomputing one body at a time, and clearing completed bits.
+ * Returns with mode forced back to SELECTING_BODY.
+ */
 static bool _astronomy_rise_render_calculating(astronomy_rise_state_t *state) {
     state->recalc_mask &= _recalc_valid_mask;
     state->recalc_remaining = 0;
@@ -927,18 +1015,34 @@ static bool _astronomy_rise_render_calculating(astronomy_rise_state_t *state) {
     return false;
 }
 
+/*
+ * Render circumpolar status.
+ * Shows active body name on top and an "always up" message on bottom when the
+ * target body never sets for the current latitude/date model.
+ */
 static void _astronomy_rise_render_status(const char *name_long, const char *name_short) {
     watch_clear_colon();
     _astronomy_rise_display_body_name(name_long, name_short);
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "AlwAysup", "ALuP  ");
 }
 
+/*
+ * Render never-rises status.
+ * Shows active body name on top and a "never" message on bottom when the body
+ * does not rise above the horizon for the current latitude/date model.
+ */
 static void _astronomy_rise_render_not_rising(const char *name_long, const char *name_short) {
     watch_clear_colon();
     _astronomy_rise_display_body_name(name_long, name_short);
     watch_display_text_with_fallback(WATCH_POSITION_BOTTOM, "NEvEr ", "nEvr  ");
 }
 
+/*
+ * Render rise-time mode.
+ * Uses shared status views for circumpolar/never-rises edge cases; otherwise
+ * displays rise HH:MM with "rI" seconds label and LAP indicator when event is
+ * on the following local day.
+ */
 static void _astronomy_rise_render_rise(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     if (state->circumpolar) {
         _astronomy_rise_render_status(name_long, name_short);
@@ -949,6 +1053,12 @@ static void _astronomy_rise_render_rise(const astronomy_rise_state_t *state, con
     }
 }
 
+/*
+ * Render set-time mode.
+ * Uses shared status views for circumpolar/never-rises edge cases; otherwise
+ * displays set HH:MM with "SE" seconds label and LAP indicator when event is
+ * on the following local day.
+ */
 static void _astronomy_rise_render_set(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     if (state->circumpolar) {
         _astronomy_rise_render_status(name_long, name_short);
@@ -959,6 +1069,11 @@ static void _astronomy_rise_render_set(const astronomy_rise_state_t *state, cons
     }
 }
 
+/*
+ * Render constellation mode.
+ * Shows active body name on top and the 6-character ecliptic constellation
+ * label derived from cached constellation index on the bottom row.
+ */
 static void _astronomy_rise_render_constellation(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     watch_clear_colon();
     _astronomy_rise_display_body_name(name_long, name_short);
@@ -967,12 +1082,15 @@ static void _astronomy_rise_render_constellation(const astronomy_rise_state_t *s
     watch_display_text(WATCH_POSITION_BOTTOM, constellation);
 }
 
+/*
+ * Render compact overview telemetry.
+ * Top-left shows body name; top-right shows face-lit percent (0-99, 2 chars).
+ * HH and MM show rise-hour and set-hour. SS shows rounded sun-angle when
+ * in-range, otherwise "--" to signal out-of-display-range values.
+ */
 static void _astronomy_rise_render_overview(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     watch_clear_colon();
-    // show object short name (2/3 chars) on top-left
-    char left_long[4]  = { name_long[0],  name_long[1],  name_long[2],  '\0' };
-    char left_short[3] = { name_short[0], name_short[1], '\0' };
-    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, left_long, left_short);
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, name_long, name_short);
 
     // top-right: face percent (2 chars)
     int pct = (int)roundf(state->face_lit_percent);
@@ -1000,6 +1118,11 @@ static void _astronomy_rise_render_overview(const astronomy_rise_state_t *state,
     watch_display_text(WATCH_POSITION_SECONDS, seconds);
 }
 
+/*
+ * Render sun-angle detail mode.
+ * Seconds label is "SA". HH:MM fields encode a trend marker plus a clamped
+ * 0-180 degree integer using fixed-width formatting for stable LCD alignment.
+ */
 static void _astronomy_rise_render_sun_angle(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     watch_clear_colon();
     _astronomy_rise_display_body_name(name_long, name_short);
@@ -1018,6 +1141,11 @@ static void _astronomy_rise_render_sun_angle(const astronomy_rise_state_t *state
     watch_display_text(WATCH_POSITION_MINUTES, minutes);
 }
 
+/*
+ * Render illuminated-face detail mode.
+ * Seconds label is "FA". HH:MM fields encode trend marker plus clamped
+ * 0-100 percent value so waxing/waning direction and magnitude fit compactly.
+ */
 static void _astronomy_rise_render_face_lit(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     watch_clear_colon();
     _astronomy_rise_display_body_name(name_long, name_short);
@@ -1036,6 +1164,11 @@ static void _astronomy_rise_render_face_lit(const astronomy_rise_state_t *state,
     watch_display_text(WATCH_POSITION_MINUTES, minutes);
 }
 
+/*
+ * Render dispatcher for active display mode.
+ * Maintains SIGNAL indicator as an above-horizon flag from current altitude,
+ * then routes to the selected render helper based on the state mode enum.
+ */
 static void _astronomy_rise_render_display_mode(const astronomy_rise_state_t *state, const char *name_long, const char *name_short) {
     if (state->altitude > 0)
         watch_set_indicator(WATCH_INDICATOR_SIGNAL);
@@ -1069,8 +1202,8 @@ static void _astronomy_rise_render_display_mode(const astronomy_rise_state_t *st
 
 static void _astronomy_rise_update(movement_event_t event, astronomy_rise_state_t *state) {
     (void)event;
-    const char *name_long = astronomy_rise_body_names_long[state->active_body_index];
-    const char *name_short = astronomy_rise_body_names[state->active_body_index];
+    const char *name_long = astronomy_rise_body_info[state->active_body_index].long_name;
+    const char *name_short = astronomy_rise_body_info[state->active_body_index].short_name;
     switch (state->mode) {
         case ASTRONOMY_RISE_MODE_SELECTING_BODY:
             if (!state->browsing_objects) {
@@ -1078,6 +1211,15 @@ static void _astronomy_rise_update(movement_event_t event, astronomy_rise_state_
                 if (state->recalc_remaining > 0) {
                     state->mode = ASTRONOMY_RISE_MODE_CALCULATING;
                     _astronomy_rise_render_calculating(state);
+                    if (state->mode == ASTRONOMY_RISE_MODE_SELECTING_BODY) {
+                        if (state->browsing_objects) {
+                            _astronomy_rise_render_selecting_body(name_long, name_short);
+                        } else {
+                            _astronomy_rise_render_summary(state);
+                        }
+                    } else {
+                        _astronomy_rise_render_display_mode(state, name_long, name_short);
+                    }
                     break;
                 }
             }
@@ -1088,7 +1230,14 @@ static void _astronomy_rise_update(movement_event_t event, astronomy_rise_state_
             }
             break;
         case ASTRONOMY_RISE_MODE_CALCULATING:
-            if (_astronomy_rise_render_calculating(state)) {
+            _astronomy_rise_render_calculating(state);
+            if (state->mode == ASTRONOMY_RISE_MODE_SELECTING_BODY) {
+                if (state->browsing_objects) {
+                    _astronomy_rise_render_selecting_body(name_long, name_short);
+                } else {
+                    _astronomy_rise_render_summary(state);
+                }
+            } else {
                 _astronomy_rise_render_display_mode(state, name_long, name_short);
             }
             break;
@@ -1150,7 +1299,7 @@ bool astronomy_rise_face_loop(movement_event_t event, void *context) {
         case EVENT_ALARM_LONG_PRESS:
             if (state->mode == ASTRONOMY_RISE_MODE_SELECTING_BODY) {
                 if (state->browsing_objects) {
-                    state->mode = ASTRONOMY_RISE_MODE_DISPLAYING_RISE;
+                    state->mode = ASTRONOMY_RISE_MODE_DISPLAYING_OVERVIEW;
                     _astronomy_rise_recalculate_body(state, state->active_body_index);
                     _astronomy_rise_update(event, state);
                 } else {
