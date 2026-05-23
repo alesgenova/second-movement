@@ -25,6 +25,11 @@ SRCS := $(filter-out $(GOSSAMER_PATH)/peripherals/rtc.c,$(SRCS))
 
 CFLAGS+=-D_POSIX_C_SOURCE=200112L
 
+# Firmware-flasher build configuration (patch-backend selection, RAM overlay
+# placement, dep-tracking repair). Its rules half, flasher-rules.mk, is
+# included after rules.mk below.
+include ./firmware-flasher/flasher.mk
+
 define n
 
 
@@ -36,6 +41,13 @@ ifeq (,$(filter clean,$(MAKECMDGOALS)))
     ifndef BOARD
       $(error Build failed: BOARD not defined. Use one of the four options below, depending on your hardware:$n$n    make BOARD=sensorwatch_red DISPLAY=display_type$n    make BOARD=sensorwatch_blue DISPLAY=display_type$n    make BOARD=sensorwatch_pro DISPLAY=display_type$n$n)
     endif
+  endif
+
+  # Expose the board name to C as BOARD_<name> (e.g. BOARD_sensorwatch_pro).
+  # gossamer only puts boards/$(BOARD)/ on the include path; board-keyed
+  # configuration that lives in this repo (watch_optical_config.h) keys on this.
+  ifdef BOARD
+    DEFINES += -DBOARD_$(BOARD)
   endif
 
   ifeq (,$(filter install,$(MAKECMDGOALS)))
@@ -80,6 +92,7 @@ INCLUDES += \
   -I./lib/base64 \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
+  -I./watch-library/shared/utils \
   -I./watch-faces/clock \
   -I./watch-faces/complication \
   -I./watch-faces/demo \
@@ -106,6 +119,7 @@ SRCS += \
   ./lib/chirpy_tx/chirpy_tx.c \
   ./lib/base64/base64.c \
   ./watch-library/shared/driver/thermistor_driver.c \
+  ./watch-library/shared/utils/serial_frame.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \
   ./watch-library/shared/watch/watch_common_display.c \
   ./watch-library/shared/watch/watch_utility.c \
@@ -119,6 +133,7 @@ INCLUDES += \
   -I./watch-library/simulator/watch \
 
 SRCS += \
+  ./watch-library/simulator/watch/uart2.c \
   ./watch-library/simulator/watch/watch.c \
   ./watch-library/simulator/watch/watch_adc.c \
   ./watch-library/simulator/watch/watch_deepsleep.c \
@@ -131,7 +146,7 @@ SRCS += \
   ./watch-library/simulator/watch/watch_spi.c \
   ./watch-library/simulator/watch/watch_storage.c \
   ./watch-library/simulator/watch/watch_tcc.c \
-  ./watch-library/simulator/watch/watch_uart.c \
+  ./watch-library/simulator/watch/watch_optical.c \
 
 else
 
@@ -140,6 +155,7 @@ INCLUDES += \
 
 SRCS += \
   ./watch-library/hardware/watch/rtc32.c \
+  ./watch-library/hardware/watch/uart2.c \
   ./watch-library/hardware/watch/watch.c \
   ./watch-library/hardware/watch/watch_adc.c \
   ./watch-library/hardware/watch/watch_deepsleep.c \
@@ -152,16 +168,28 @@ SRCS += \
   ./watch-library/hardware/watch/watch_spi.c \
   ./watch-library/hardware/watch/watch_storage.c \
   ./watch-library/hardware/watch/watch_tcc.c \
-  ./watch-library/hardware/watch/watch_uart.c \
   ./watch-library/hardware/watch/watch_usb_descriptors.c \
   ./watch-library/hardware/watch/watch_usb_cdc.c \
+  ./watch-library/hardware/watch/watch_optical.c \
 
 endif
 
 include watch-faces.mk
 
 SRCS += \
+  ./movement_optical.c \
   ./movement.c \
 
 # Finally, leave this line at the bottom of the file.
 include $(GOSSAMER_PATH)/rules.mk
+
+# make remakes included makefiles before any goal, so a stale .d would make
+# `make clean` run rules.mk's $(CC) -MM regen rule -- which fails on pins.h,
+# since clean doesn't require BOARD and so lacks the board include paths.
+# An empty recipe beats the pattern rule; clean deletes the .d files anyway.
+ifneq (,$(filter clean,$(MAKECMDGOALS)))
+$(DEPFILES): ;
+endif
+
+# Firmware-flasher rules (must follow rules.mk; config half included above).
+include ./firmware-flasher/flasher-rules.mk

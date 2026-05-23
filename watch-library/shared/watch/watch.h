@@ -27,7 +27,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "pins.h"
+#include "watch_optical_config.h"   /* board wiring of the optical link; defines HAS_OPTICAL_LINK */
 
 #define SWCLK GPIO(GPIO_PORTA, 30)
 #define SWDIO GPIO(GPIO_PORTA, 31)
@@ -69,7 +71,6 @@ typedef void (*watch_cb_t)(void);
 #include "watch_gpio.h"
 #include "watch_i2c.h"
 #include "watch_spi.h"
-#include "watch_uart.h"
 #include "watch_storage.h"
 #include "watch_deepsleep.h"
 

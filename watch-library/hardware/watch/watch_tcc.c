@@ -358,19 +358,18 @@ void _watch_enable_tcc(void) {
 }
 
 void _watch_disable_tcc(void) {
-    // disable all PWM pins
+    // Park the buzzer pin (it's ours) and disable the TCC.
     HAL_GPIO_BUZZER_pmuxdis();
     HAL_GPIO_BUZZER_off();
-    HAL_GPIO_RED_pmuxdis();
-    HAL_GPIO_RED_off();
-#ifdef WATCH_GREEN_TCC_CHANNEL
-    HAL_GPIO_GREEN_pmuxdis();
-    HAL_GPIO_GREEN_off();
-#endif
-#ifdef WATCH_BLUE_TCC_CHANNEL
-    HAL_GPIO_BLUE_pmuxdis();
-    HAL_GPIO_BLUE_off();
-#endif
+    // NB: do NOT touch the RED/GREEN/BLUE (LED) pins here. Their mux is owned by
+    // _watch_enable_led_pins() / _watch_disable_led_pins(), tied to _led_is_active,
+    // and _watch_maybe_disable_tcc() only reaches this point once the LEDs are
+    // already inactive (and thus already unmuxed). Unmuxing them here was
+    // redundant for LED use but actively harmful when the buzzer is used ALONE
+    // while another peripheral has borrowed an LED pin: e.g. the IR link muxes the
+    // RED LED pin to SERCOM3 for TX, and a buzzer-only beep ending mid-transmit
+    // would rip that pin away. Managing the LED mux only where the LED is actually
+    // used keeps buzzer-only use from ever disturbing it.
     tcc_disable(0);
 }
 
