@@ -32,8 +32,10 @@ SRCS += \
   ./watch-faces/settings/settings_face.c \
   ./watch-faces/settings/finetune_face.c \
   ./watch-faces/settings/nanosec_face.c \
+  ./watch-faces/settings/firmware_flasher_face.c \
   ./watch-faces/io/chirpy_demo_face.c \
-  ./watch-faces/io/irda_upload_face.c \
+  ./watch-faces/io/ir_rx_face.c \
+  ./watch-faces/io/ir_tx_face.c \
   ./watch-faces/complication/probability_face.c \
   ./watch-faces/clock/close_enough_face.c \
   ./watch-faces/complication/tarot_face.c \
