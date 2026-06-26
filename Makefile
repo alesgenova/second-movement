@@ -80,6 +80,7 @@ INCLUDES += \
   -I./lib/base64 \
   -I./watch-library/shared/watch \
   -I./watch-library/shared/driver \
+  -I./watch-library/shared/utils \
   -I./watch-faces/clock \
   -I./watch-faces/complication \
   -I./watch-faces/demo \
@@ -106,6 +107,7 @@ SRCS += \
   ./lib/chirpy_tx/chirpy_tx.c \
   ./lib/base64/base64.c \
   ./watch-library/shared/driver/thermistor_driver.c \
+  ./watch-library/shared/utils/serial_frame.c \
   ./watch-library/shared/watch/watch_common_buzzer.c \
   ./watch-library/shared/watch/watch_common_display.c \
   ./watch-library/shared/watch/watch_utility.c \
@@ -119,6 +121,7 @@ INCLUDES += \
   -I./watch-library/simulator/watch \
 
 SRCS += \
+  ./watch-library/simulator/watch/uart2.c \
   ./watch-library/simulator/watch/watch.c \
   ./watch-library/simulator/watch/watch_adc.c \
   ./watch-library/simulator/watch/watch_deepsleep.c \
@@ -131,7 +134,7 @@ SRCS += \
   ./watch-library/simulator/watch/watch_spi.c \
   ./watch-library/simulator/watch/watch_storage.c \
   ./watch-library/simulator/watch/watch_tcc.c \
-  ./watch-library/simulator/watch/watch_uart.c \
+  ./watch-library/simulator/watch/watch_optical.c \
 
 else
 
@@ -140,6 +143,7 @@ INCLUDES += \
 
 SRCS += \
   ./watch-library/hardware/watch/rtc32.c \
+  ./watch-library/hardware/watch/uart2.c \
   ./watch-library/hardware/watch/watch.c \
   ./watch-library/hardware/watch/watch_adc.c \
   ./watch-library/hardware/watch/watch_deepsleep.c \
@@ -152,9 +156,9 @@ SRCS += \
   ./watch-library/hardware/watch/watch_spi.c \
   ./watch-library/hardware/watch/watch_storage.c \
   ./watch-library/hardware/watch/watch_tcc.c \
-  ./watch-library/hardware/watch/watch_uart.c \
   ./watch-library/hardware/watch/watch_usb_descriptors.c \
   ./watch-library/hardware/watch/watch_usb_cdc.c \
+  ./watch-library/hardware/watch/watch_optical.c \
 
 endif
 
