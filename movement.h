@@ -311,11 +311,12 @@ typedef struct {
     watch_buzzer_volume_t signal_volume;
     watch_buzzer_volume_t alarm_volume;
 
-    uint8_t when_to_count_steps : 4;
+    uint8_t when_to_count_steps : 3;
     uint8_t counting_steps      : 1;
     uint8_t count_steps_keep_on : 1;
     uint8_t count_steps_keep_off: 1;
     uint8_t tap_enabled         : 1;
+    uint8_t double_tap_enabled  : 1;
     int8_t step_count_disable_req_sec;
 } movement_state_t;
 
@@ -355,6 +356,8 @@ uint8_t movement_claim_backup_register(void);
 
 int32_t movement_get_current_timezone_offset_for_zone(uint8_t zone_index);
 int32_t movement_get_current_timezone_offset(void);
+int32_t movement_get_timezone_offset_for_date_in_zone(watch_date_time_t date_time, uint8_t zone_index);
+int32_t movement_get_timezone_offset_for_date(watch_date_time_t date_time);
 
 int32_t movement_get_timezone_index(void);
 void movement_set_timezone_index(uint8_t value);
@@ -414,7 +417,7 @@ bool movement_alarm_enabled(void);
 void movement_set_alarm_enabled(bool value);
 
 // if the board has an accelerometer, these functions will enable or disable tap detection.
-bool movement_enable_tap_detection_if_available(void);
+bool movement_enable_tap_detection_if_available(bool enable_double_tap);
 bool movement_disable_tap_detection_if_available(void);
 
 bool movement_has_lis2dw(void);
