@@ -57,9 +57,15 @@ const watch_face_t watch_faces[] = {
 /* Determines the intensity of the led colors
  * Set a hex value 0-15 with 0x0 being off and 0xF being max intensity
  */
+#ifdef FORCE_GSHOCK_LCD_TYPE
+#define MOVEMENT_DEFAULT_RED_COLOR 0x7  // Used as the White LED
+#define MOVEMENT_DEFAULT_GREEN_COLOR 0x0  // Unused
+#define MOVEMENT_DEFAULT_BLUE_COLOR 0x0  // Unused
+#else
 #define MOVEMENT_DEFAULT_RED_COLOR 0x0
 #define MOVEMENT_DEFAULT_GREEN_COLOR 0xF
 #define MOVEMENT_DEFAULT_BLUE_COLOR 0x0
+#endif
 
 /* Set to true for 24h mode or false for 12h mode */
 #define MOVEMENT_DEFAULT_24H_MODE false
@@ -106,6 +112,10 @@ const watch_face_t watch_faces[] = {
  * A value of 4 is a good starting point if you have issues
  * with multiple button presses firing.
 */
+#ifdef FORCE_GSHOCK_LCD_TYPE
+#define MOVEMENT_DEBOUNCE_TICKS 4
+#else
 #define MOVEMENT_DEBOUNCE_TICKS 0
+#endif
 
 #endif // MOVEMENT_CONFIG_H_

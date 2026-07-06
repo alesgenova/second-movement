@@ -506,7 +506,259 @@ static const digit_mapping_t Classic_LCD_Display_Mapping[] = {
     },
 };
 
+// Casio G-Shock DW5600 LCD
+static const uint8_t GShock_LCD_Character_Set[] =
+{
+    0b00000000, // [space]
+    0b01100000, // ! (L in the top half for positions 4 and 6)
+    0b00100010, // "
+    0b01100011, // # (degree symbol, hash mark doesn't fit)
+    0b00101101, // $ (S without the center segment)
+    0b00000000, // % (unused)
+    0b01000100, // & ("lowercase 7" for positions 4 and 6)
+    0b00100000, // '
+    0b00111001, // (
+    0b00001111, // )
+    0b11000000, // * (The + sign for use in position 0)
+    0b01110000, // + (segments E, F and G; looks like ┣╸)
+    0b00000100, // ,
+    0b01000000, // -
+    0b10110001, // Г (. is unused, so this is taking over)
+    0b00010010, // /
+    0b00111111, // 0
+    0b00000110, // 1
+    0b01011011, // 2
+    0b01001111, // 3
+    0b01100110, // 4
+    0b01101101, // 5
+    0b01111101, // 6
+    0b00100111, // 7
+    0b01111111, // 8
+    0b01101111, // 9
+    0b01011101, // ö (: is unused, so this is taking over)
+    0b00011101, // ü (; is unused, so this is taking over)
+    0b01011000, // <
+    0b01001000, // =
+    0b01001100, // >
+    0b01010011, // ?
+    0b11111111, // @ (all segments on)
+    0b01110111, // A
+    0b01111111, // B
+    0b00111001, // C
+    0b00111111, // D
+    0b01111001, // E
+    0b01110001, // F
+    0b00111101, // G
+    0b01110110, // H
+    0b10001001, // I (only works in position 0)
+    0b00001110, // J
+    0b01110101, // K
+    0b00111000, // L
+    0b10110111, // M (only works in position 0)
+    0b00110111, // N
+    0b00111111, // O
+    0b01110011, // P
+    0b01100111, // Q
+    0b01110011, // R (same as P, only works in position 0 and 1)
+    0b01101101, // S
+    0b10000001, // T (only works in position 0; set (1, 12) to make it work in position 1)
+    0b00111110, // U
+    0b00111110, // V
+    0b10111110, // W (only works in position 0)
+    0b01111110, // X
+    0b01101110, // Y
+    0b00011011, // Z
+    0b00111001, // [
+    0b00100100, // backslash
+    0b00001111, // ]
+    0b00100011, // ^
+    0b00001000, // _
+    0b00000010, // `
+    0b01011111, // a
+    0b01111100, // b
+    0b01011000, // c
+    0b01011110, // d
+    0b01111011, // e
+    0b01110001, // f
+    0b01101111, // g
+    0b01110100, // h
+    0b00010000, // i
+    0b00001110, // j
+    0b01110101, // k
+    0b00110000, // l
+    0b01010100, // m (only works in position 0)
+    0b01010100, // n
+    0b01011100, // o
+    0b01110011, // p
+    0b01100111, // q
+    0b01010000, // r
+    0b01101101, // s
+    0b01111000, // t
+    0b00011100, // u
+    0b00011100, // v
+    0b00011100, // w (only works in position 0)
+    0b01111110, // x
+    0b01101110, // y
+    0b00011011, // z
+    0b00010110, // { (open brace doesn't really work; overriden to represent the two character ligature "il")
+    0b00110110, // | (overriden to represent the two character ligature "ll")
+    0b00110100, // } (overriden to represent the two character ligature "li")
+    0b00000001, // ~
+};
+
+static const digit_mapping_t GShock_LCD_Display_Mapping[] = {
+    // Positions 0 and 1 are the Weekday or Mode digits
+    {
+        .segment = {
+            { .address = { .com = 3, .seg = 20 } }, // 0A
+            { .address = { .com = 2, .seg = 19 } }, // 0B
+            { .address = { .com = 0, .seg = 19 } }, // 0C
+            { .address = { .com = 0, .seg = 21 } }, // 0D
+            { .address = { .com = 1, .seg = 21 } }, // 0E
+            { .address = { .com = 2, .seg = 21 } }, // 0F
+            { .address = { .com = 1, .seg = 20} },  // 0G
+            { .address = { .com = 2, .seg = 20 } }, // 0H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 3, .seg = 9 } },  // 1A
+            { .address = { .com = 2, .seg = 9 } },  // 1B
+            { .address = { .com = 1, .seg = 9 } },  // 1C
+            { .address = { .com = 0, .seg = 10 } }, // 1D
+            { .address = { .com = 1, .seg = 19 } }, // 1E
+            { .address = { .com = 2, .seg = 10 } }, // 1F
+            { .address = { .com = 1, .seg = 10 } }, // 1G
+            { .address = { .com = 3, .seg = 10 } },  // 1H
+        },
+    },
+    // Positions 2 and 3 are the Day digits
+    {
+        .segment = {
+            { .address = { .com = 3, .seg = 3 } },  // 2A
+            { .address = { .com = 3, .seg = 2 } },  // 2B
+            { .address = { .com = 1, .seg = 2 } },  // 2C
+            { .address = { .com = 1, .seg = 3 } },  // 2D
+            { .address = { .com = 2, .seg = 4 } },  // 2E
+            { .address = { .com = 3, .seg = 4 } },  // 2F
+            { .address = { .com = 2, .seg = 3 } },  // 2G
+            { .value = segment_does_not_exist },    // 2H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 3, .seg = 0 } },  // 3A
+            { .address = { .com = 2, .seg = 0 } },  // 3B
+            { .address = { .com = 1, .seg = 0 } },  // 3C
+            { .address = { .com = 1, .seg = 1 } },  // 3D
+            { .address = { .com = 2, .seg = 2 } },  // 3E
+            { .address = { .com = 3, .seg = 1 } },  // 3F
+            { .address = { .com = 2, .seg = 1 } },  // 3G
+            { .value = segment_does_not_exist },    // 3H
+        },
+    },
+    // Positions 4-9 are the Clock digits
+    {
+        .segment = {
+            { .address = { .com = 0, .seg = 23 } }, // 4A
+            { .address = { .com = 1, .seg = 24 } }, // 4B
+            { .address = { .com = 3, .seg = 23 } }, // 4C
+            { .address = { .com = 3, .seg = 22 } }, // 4D
+            { .address = { .com = 2, .seg = 22 } }, // 4E
+            { .address = { .com = 1, .seg = 23 } }, // 4F
+            { .address = { .com = 2, .seg = 23 } }, // 4G
+            { .value = segment_does_not_exist },    // 4H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 1, .seg = 25 } }, // 5A
+            { .address = { .com = 1, .seg = 26 } }, // 5B
+            { .address = { .com = 3, .seg = 26 } }, // 5C
+            { .address = { .com = 3, .seg = 25 } }, // 5D
+            { .address = { .com = 3, .seg = 24 } }, // 5E
+            { .address = { .com = 2, .seg = 24 } }, // 5F
+            { .address = { .com = 2, .seg = 25 } }, // 5G
+            { .value = segment_does_not_exist },    // 5H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 0, .seg = 18 } }, // 6A
+            { .address = { .com = 1, .seg = 17 } }, // 6B
+            { .address = { .com = 2, .seg = 17 } }, // 6C
+            { .address = { .com = 3, .seg = 17 } }, // 6D
+            { .address = { .com = 3, .seg = 18 } }, // 6E
+            { .address = { .com = 1, .seg = 18 } }, // 6F
+            { .address = { .com = 2, .seg = 18 } }, // 6G
+            { .value = segment_does_not_exist },    // 6H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 1, .seg = 16 } }, // 7A
+            { .address = { .com = 1, .seg = 15 } }, // 7B
+            { .address = { .com = 3, .seg = 14 } }, // 7C
+            { .address = { .com = 3, .seg = 15 } }, // 7D
+            { .address = { .com = 3, .seg = 16 } }, // 7E
+            { .address = { .com = 2, .seg = 16 } }, // 7F
+            { .address = { .com = 2, .seg = 15 } }, // 7G
+            { .value = segment_does_not_exist },    // 7H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 0, .seg = 13 } }, // 8A
+            { .address = { .com = 1, .seg = 13 } }, // 8B
+            { .address = { .com = 2, .seg = 13 } }, // 8C
+            { .address = { .com = 3, .seg = 13 } }, // 8D
+            { .address = { .com = 2, .seg = 14 } }, // 8E
+            { .address = { .com = 0, .seg = 14 } }, // 8F
+            { .address = { .com = 1, .seg = 14 } }, // 8G
+            { .value = segment_does_not_exist },    // 8H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 0, .seg = 11 } }, // 9A
+            { .address = { .com = 1, .seg = 11 } }, // 9B
+            { .address = { .com = 2, .seg = 11 } }, // 9C
+            { .address = { .com = 3, .seg = 11 } }, // 9D
+            { .address = { .com = 3, .seg = 12 } }, // 9E
+            { .address = { .com = 1, .seg = 12 } }, // 9F
+            { .address = { .com = 2, .seg = 12 } }, // 9G
+            { .value = segment_does_not_exist },    // 9H
+        },
+    },
+    // Positions 10 and 11 are the Month digits
+    {
+        .segment = {
+            { .address = { .com = 2, .seg = 8 } },  // 10A
+            { .address = { .com = 3, .seg = 8 } },  // 10B
+            { .address = { .com = 1, .seg = 8 } },  // 10C
+            { .address = { .com = 2, .seg = 8 } },  // 10D
+            { .address = { .com = 2, .seg = 8 } },  // 10E
+            { .value = segment_does_not_exist },    // 10F
+            { .address = { .com = 2, .seg = 8 } },  // 10G
+            { .value = segment_does_not_exist },    // 10H
+        },
+    },
+    {
+        .segment = {
+            { .address = { .com = 3, .seg = 7 } },  // 11A
+            { .address = { .com = 3, .seg = 6 } },  // 11B
+            { .address = { .com = 1, .seg = 5 } },  // 11C
+            { .address = { .com = 1, .seg = 6 } },  // 11D
+            { .address = { .com = 1, .seg = 7 } },  // 11E
+            { .address = { .com = 2, .seg = 7 } },  // 11F
+            { .address = { .com = 2, .seg = 6 } },  // 11G
+            { .value = segment_does_not_exist },    // 11H
+        },
+    },
+};
+
 void watch_display_character(uint8_t character, uint8_t position);
 void watch_display_character_lp_seconds(uint8_t character, uint8_t position);
 
 void _watch_update_indicator_segments(void);
+void _watch_update_indicator_segments_gshock(void);

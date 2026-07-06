@@ -333,6 +333,7 @@ void _watch_enable_tcc(void) {
 #ifdef WATCH_INVERT_LED_POLARITY
     // invert all channels, we'll flip the buzzer back in just a moment.
     // this is easier than writing a maze of #ifdefs.
+    tcc_set_channel_polarity(0, 2, TCC_CHANNEL_POLARITY_INVERTED);
     tcc_set_channel_polarity(0, 4, TCC_CHANNEL_POLARITY_INVERTED);
     tcc_set_channel_polarity(0, 5, TCC_CHANNEL_POLARITY_INVERTED);
     tcc_set_channel_polarity(0, 6, TCC_CHANNEL_POLARITY_INVERTED);
@@ -457,15 +458,27 @@ void watch_set_led_color_rgb(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 void watch_set_led_red(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(255, 0, 0);
+#endif
 }
 
 void watch_set_led_green(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(0, 255, 0);
+#endif
 }
 
 void watch_set_led_yellow(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(255, 255, 0);
+#endif
 }
 
 void watch_set_led_off(void) {

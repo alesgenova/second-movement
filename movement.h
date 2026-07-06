@@ -135,6 +135,12 @@ typedef enum {
     EVENT_ALARM_LONG_UP,        // The alarm button was held for over half a second, and released.
     EVENT_ALARM_REALLY_LONG_PRESS, // The alarm button was held for more than 1.5 second, note yet released.
     // EVENT_ALARM_REALLY_LONG_UP, // The alarm button was held for more than 1.5 second, and released.
+    EVENT_START_BUTTON_DOWN,    // The start button has been pressed, but not yet released. G-Shock (jolt) only.
+    EVENT_START_BUTTON_UP,      // The start button was pressed for less than half a second, and released. G-Shock (jolt) only.
+    EVENT_START_LONG_PRESS,     // The start button was held for over half a second, but not yet released. G-Shock (jolt) only.
+    EVENT_START_LONG_UP,        // The start button was held for over half a second, and released. G-Shock (jolt) only.
+    EVENT_START_REALLY_LONG_PRESS, // The start button was held for more than 1.5 second, note yet released. G-Shock (jolt) only.
+    // EVENT_START_REALLY_LONG_UP, // The start button was held for more than 1.5 second, and released. G-Shock (jolt) only.
 
     EVENT_ACCELEROMETER_WAKE,   // The accelerometer has detected motion and woken up.
     EVENT_SINGLE_TAP,           // Accelerometer detected a single tap. This event is not yet implemented.
@@ -146,6 +152,7 @@ typedef enum {
     LIGHT_BUTTON_TIMEOUT = 0,   // Light button longpress timeout
     MODE_BUTTON_TIMEOUT,        // Mode button longpress timeout
     ALARM_BUTTON_TIMEOUT,       // Alarm button longpress timeout
+    START_BUTTON_TIMEOUT,       // Start button longpress timeout (G-Shock/jolt only)
     LED_TIMEOUT,                // LED off timeout
     RESIGN_TIMEOUT,             // Resign active face timeout
     SLEEP_TIMEOUT,              // Low-energy begin timeout

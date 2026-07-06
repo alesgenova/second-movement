@@ -46,20 +46,31 @@
 #define SLCD_COMNUM(segid) (((segid) >> 5) & 0x07)
 #define SLCD_SEGNUM(segid) ((segid) & 0x1F)
 
+#ifdef FORCE_GSHOCK_LCD_TYPE
+#define MOVEMENT_GSHOCK_DAY_JUSTIFY_LEFT true
+#endif
+
 /// An enum listing the icons and indicators available on the watch.
 typedef enum {
     WATCH_INDICATOR_SIGNAL = 0, ///< The hourly signal indicator; also useful for indicating that sensors are on.
     WATCH_INDICATOR_BELL,       ///< The small bell indicating that an alarm is set.
     WATCH_INDICATOR_PM,         ///< The PM indicator, indicating that a time is in the afternoon.
     WATCH_INDICATOR_24H,        ///< The 24H indicator, indicating that the watch is in a 24-hour mode.
-    WATCH_INDICATOR_LAP,        ///< The LAP indicator; the F-91W uses this in its stopwatch UI. On custom LCD it's a looped arrow.
+    WATCH_INDICATOR_LAP,        ///< The LAP indicator; the F-91W uses this in its stopwatch UI. On custom LCD it's a looped arrow. On the G-Shock it's SPLIT.
 
     // These next indicators are only available on the new custom LCD:
-    WATCH_INDICATOR_ARROWS,     ///< The interlocking arrows indicator; indicates data transfer, or can signal to change the battery.
-    WATCH_INDICATOR_SLEEP,      ///< The sleep indicator.
+    WATCH_INDICATOR_ARROWS,     ///< The interlocking arrows indicator; indicates data transfer, or can signal to change the battery. On the G-Shock it's AUTO.
+    WATCH_INDICATOR_SLEEP,      ///< The sleep indicator. On the G-Shock it's the SUN icon.
 
     // You can generally address the colon using dedicated functions, but it's also available here if needed.
     WATCH_INDICATOR_COLON,      ///< The colon between hours and minutes.
+
+    // These are G-Shock specific indicators:
+    WATCH_INDICATOR_SINGLE_QUOTE,   ///< Top-right of hour digit
+    WATCH_INDICATOR_DOUBLE_QUOTE,   ///< Top-right of minutes digit
+    WATCH_INDICATOR_BOX_DASH,       ///< In the Date box between the colon
+    WATCH_INDICATOR_BOX_COLON_TOP,  ///< In the Date box
+    WATCH_INDICATOR_BOX_COLON_BOTTOM, ///< In the Date box
 } watch_indicator_t;
 
 /// An enum listing the locations on the display where text can be placed.
@@ -72,6 +83,8 @@ typedef enum {
     WATCH_POSITION_HOURS,       ///< Display 2 characters in the hours portion of the main line.
     WATCH_POSITION_MINUTES,     ///< Display 2 characters in the minutes portion of the main line.
     WATCH_POSITION_SECONDS,     ///< Display 2 characters in the seconds portion of the main line.
+    WATCH_POSITION_MONTH_GSHOCK,///< Display 2 characters in the month portion of the G-Shock DW5600
+    WATCH_POSITION_DAY_GSHOCK,  ///< Display 2 characters in the day portion of the G-Shock DW5600
 } watch_position_t;
 
 /// an enum describing the possible LCD types
@@ -79,6 +92,7 @@ typedef enum {
     WATCH_LCD_TYPE_UNKNOWN  = 0, ///< Value at boot: unknown LCD
     WATCH_LCD_TYPE_CLASSIC  = 0b10101001, ///< The original famous F-91W LCD
     WATCH_LCD_TYPE_CUSTOM   = 0b01010110, ///< The custom Oddly Specific LCD
+    WATCH_LCD_TYPE_GSHOCK   = 0b01010111, ///< The original G-Shock DW5600 LCD
 } watch_lcd_type_t;
 
 /** @brief Determines the type of LCD being used by the watch.
@@ -182,6 +196,12 @@ void watch_display_text(watch_position_t location, const char *string);
 void watch_display_text_with_fallback(watch_position_t location, const char *string, const char *fallback);
 
 /**
+ * @brief Same as watch_display_text_with_fallback, but also accepts a string for the G-Shock.
+ * @param string_gshock A null-terminated string to display on the G-Shock DW5600 LCD.
+ */
+void watch_display_text_with_fallback_and_gshock(watch_position_t location, const char *string, const char *string_gshock, const char *fallback);
+
+/**
  * @brief Displays a floating point number as best we can on whatever LCD is available.
  * @details The custom LCD can energize a decimal point in the same position as the colon. With the leading 1,
  *          we can display numbers from -99.99 to 199.99 with one or two digits of precision, depending on the
@@ -222,6 +242,11 @@ void watch_set_indicator(watch_indicator_t indicator);
   * @param indicator One of the indicator segments from the enum. @see watch_indicator_t
   */
 void watch_clear_indicator(watch_indicator_t indicator);
+
+/** @brief Sets all indicator segments.
+  * @see watch_indicator_t
+  */
+void watch_set_all_indicators(void);
 
 /** @brief Clears all indicator segments.
   * @see watch_indicator_t
