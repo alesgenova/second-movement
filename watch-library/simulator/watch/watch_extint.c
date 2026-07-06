@@ -39,11 +39,19 @@ static watch_cb_t external_interrupt_light_callback = NULL;
 static eic_interrupt_trigger_t external_interrupt_light_trigger = INTERRUPT_TRIGGER_NONE;
 static watch_cb_t external_interrupt_alarm_callback = NULL;
 static eic_interrupt_trigger_t external_interrupt_alarm_trigger = INTERRUPT_TRIGGER_NONE;
+static watch_cb_t external_interrupt_start_callback = NULL;
+static eic_interrupt_trigger_t external_interrupt_start_trigger = INTERRUPT_TRIGGER_NONE;
 
-#define BTN_ID_ALARM 3
+#if defined(FORCE_GSHOCK_LCD_TYPE)
+#define BTN_ID_START 1
+#define BTN_ID_LIGHT 4
+#else
+#define BTN_ID_START 4
 #define BTN_ID_LIGHT 1
+#endif
+#define BTN_ID_ALARM 3
 #define BTN_ID_MODE 2
-static const uint8_t BTN_IDS[] = { BTN_ID_ALARM, BTN_ID_LIGHT, BTN_ID_MODE };
+static const uint8_t BTN_IDS[] = { BTN_ID_ALARM, BTN_ID_LIGHT, BTN_ID_MODE, BTN_ID_START };
 static EM_BOOL watch_invoke_interrupt_callback(const uint8_t button_id, eic_interrupt_trigger_t trigger);
 
 static EM_BOOL watch_invoke_key_callback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData) {
@@ -54,6 +62,24 @@ static EM_BOOL watch_invoke_key_callback(int eventType, const EmscriptenKeyboard
     if (key[1] == 0) {
         // event is from a plain letter key
         switch (key[0]) {
+#if defined(FORCE_GSHOCK_LCD_TYPE)
+            case 'A':
+            case 'a':
+                button_id = BTN_ID_START;
+                break;
+            case 'L':
+            case 'l':
+                button_id = BTN_ID_ALARM;
+                break;
+            case 'M':
+            case 'm':
+                button_id = BTN_ID_MODE;
+                break;
+            case 'S':
+            case 's':
+                button_id = BTN_ID_LIGHT;
+                break;
+#else
             case 'A':
             case 'a':
                 button_id = BTN_ID_ALARM;
@@ -66,6 +92,7 @@ static EM_BOOL watch_invoke_key_callback(int eventType, const EmscriptenKeyboard
             case 'm':
                 button_id = BTN_ID_MODE;
                 break;
+#endif
             default:
                 return EM_FALSE;
         }
@@ -75,7 +102,13 @@ static EM_BOOL watch_invoke_key_callback(int eventType, const EmscriptenKeyboard
             case 'U': // ArrowUp
                 button_id = BTN_ID_LIGHT;
                 break;
+#if defined(FORCE_GSHOCK_LCD_TYPE)
             case 'D': // ArrowDown
+                button_id = BTN_ID_START;
+                break;
+#else
+            case 'D': // ArrowDown
+#endif
             case 'L': // ArrowLeft
                 button_id = BTN_ID_MODE;
                 break;
@@ -171,6 +204,16 @@ static EM_BOOL watch_invoke_interrupt_callback(const uint8_t button_id, eic_inte
             callback = external_interrupt_alarm_callback;
             trigger = external_interrupt_alarm_trigger;
             break;
+        case BTN_ID_START:
+#if defined(FORCE_GSHOCK_LCD_TYPE)
+            HAL_GPIO_BTN_START_write(level);
+            callback = external_interrupt_start_callback;
+            trigger = external_interrupt_start_trigger;
+#else
+            callback = NULL;
+            trigger = INTERRUPT_TRIGGER_NONE;
+#endif
+            break;
         default:
             return EM_FALSE;
     }
@@ -203,5 +246,10 @@ void watch_register_interrupt_callback(const uint8_t pin, watch_cb_t callback, e
     } else if (pin == HAL_GPIO_BTN_ALARM_pin()) {
         external_interrupt_alarm_callback = callback;
         external_interrupt_alarm_trigger = trigger;
+#if defined(FORCE_GSHOCK_LCD_TYPE)
+    } else if (pin == HAL_GPIO_BTN_START_pin()) {
+        external_interrupt_start_callback = callback;
+        external_interrupt_start_trigger = trigger;
+#endif
     }
 }

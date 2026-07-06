@@ -287,6 +287,11 @@ void watch_enable_leds(void) {}
 void watch_disable_leds(void) {}
 
 void watch_set_led_color_rgb(uint8_t red, uint8_t green, uint8_t blue) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    // Force the LED to be white by setting all of the colors the same on the simulator.
+    green = red;
+    blue = red;
+#endif
     EM_ASM({
         let filter = document.getElementById("ledcolor");
         let color_matrix = filter.children[0].values.baseVal;
@@ -298,15 +303,27 @@ void watch_set_led_color_rgb(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 void watch_set_led_red(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(255, 0, 0);
+#endif
 }
 
 void watch_set_led_green(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(0, 255, 0);
+#endif
 }
 
 void watch_set_led_yellow(void) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    watch_set_led_color_rgb(255, 255, 255);
+#else
     watch_set_led_color_rgb(255, 255, 0);
+#endif
 }
 
 void watch_set_led_off(void) {

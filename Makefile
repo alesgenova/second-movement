@@ -14,6 +14,13 @@ GOSSAMER_PATH=gossamer
 
 # End of user configurable options.
 
+# The sensorwatch_jolt board (Casio DW5600 G-Shock mainboard) always uses the
+# G-Shock display, so allow `make BOARD=jolt` as a convenient shorthand.
+ifneq (,$(filter $(BOARD),jolt sensorwatch_jolt))
+    DISPLAY = jolt
+    override BOARD = sensorwatch_jolt
+endif
+
 # Support USB features?
 TINYUSB_CDC=1
 
@@ -51,6 +58,8 @@ ifeq (,$(filter clean,$(MAKECMDGOALS)))
         DEFINES += -DFORCE_CUSTOM_LCD_TYPE
       else ifeq ($(DISPLAY), classic)
         DEFINES += -DFORCE_CLASSIC_LCD_TYPE
+      else ifeq ($(DISPLAY), jolt)
+        DEFINES += -DFORCE_GSHOCK_LCD_TYPE
       else ifeq ($(DISPLAY), autodetect)
         $(warning WARNING: LCD autodetection is experimental and not reliable! We suggest specifying DISPLAY=classic or DISPLAY=custom for reliable operation.)
       else
