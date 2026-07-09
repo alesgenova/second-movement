@@ -492,6 +492,10 @@ void movement_force_led_off(void) {
 }
 
 bool movement_default_loop_handler(movement_event_t event) {
+    // Remembers which page the START "peek time" button jumped away from.
+    // UINT8_MAX (out of range) means "no peek in progress", so a stray release is ignored.
+    static uint8_t peek_return_page_idx = UINT8_MAX;
+
     switch (event.event_type) {
         case EVENT_MODE_BUTTON_UP:
             movement_move_to_next_face();
@@ -510,6 +514,19 @@ bool movement_default_loop_handler(movement_event_t event) {
                 movement_move_to_face(MOVEMENT_SECONDARY_FACE_INDEX);
             } else {
                 movement_move_to_face(0);
+            }
+            break;
+        case EVENT_START_BUTTON_DOWN:
+            // "Peek time": jump to the first page, remembering where we came from.
+            peek_return_page_idx = movement_state.current_face_idx;
+            movement_move_to_face(0);
+            break;
+        case EVENT_START_BUTTON_UP:
+        case EVENT_START_LONG_UP:
+            // Done peeking: navigate back to the page we came from.
+            if (peek_return_page_idx != UINT8_MAX) {
+                movement_move_to_face(peek_return_page_idx);
+                peek_return_page_idx = UINT8_MAX;
             }
             break;
         default:
@@ -958,6 +975,25 @@ float movement_get_temperature(void) {
 #endif
 
     return temperature_c;
+}
+
+void movement_display_time_in_date_area(watch_date_time_t date_time) {
+#ifdef FORCE_GSHOCK_LCD_TYPE
+    char buf[4];
+    watch_set_indicator(WATCH_INDICATOR_BOX_COLON_TOP);
+    watch_set_indicator(WATCH_INDICATOR_BOX_COLON_BOTTOM);
+    uint8_t hour = date_time.unit.hour;
+    if (movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_12H) {
+        hour %= 12;
+        if (hour == 0) hour = 12;
+    }
+    sprintf(buf, "%2d", hour);
+    watch_display_text(WATCH_POSITION_MONTH_GSHOCK, buf);
+    sprintf(buf, "%02d", date_time.unit.minute);
+    watch_display_text(WATCH_POSITION_DAY_GSHOCK, buf);
+#else
+    (void) date_time;
+#endif
 }
 
 void app_init(void) {

@@ -47,7 +47,7 @@
 #define SLCD_SEGNUM(segid) ((segid) & 0x1F)
 
 #ifdef FORCE_GSHOCK_LCD_TYPE
-#define MOVEMENT_GSHOCK_DAY_JUSTIFY_LEFT true
+#define MOVEMENT_GSHOCK_DAY_JUSTIFY_LEFT false
 #endif
 
 /// An enum listing the icons and indicators available on the watch.
