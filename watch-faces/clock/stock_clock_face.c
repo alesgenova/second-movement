@@ -178,26 +178,69 @@ static void clock_check_battery_periodically(stock_clock_state_t *state, watch_d
     clock_indicate_low_available_power(state);
 }
 
-static void clock_display_all(watch_date_time_t date_time, bool skip_seconds) {
-    char buf[8 + 1];
+// On the G-Shock (jolt) display, the upper-right corner has room for the month
+// and day, so show "month - day" there instead of just the day.
+static void clock_display_gshock_date(watch_date_time_t date_time) {
+    char buf[2 + 1];
 
+    clock_indicate(WATCH_INDICATOR_BOX_DASH, true);
     snprintf(
         buf,
         sizeof(buf),
-        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d%02d%02d" : "%2d%2d%02d%02d",
-        date_time.unit.day,
-        date_time.unit.hour,
-        date_time.unit.minute,
-        date_time.unit.second
+        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d" : "%2d",
+        date_time.unit.month
     );
+    watch_display_text(WATCH_POSITION_MONTH_GSHOCK, buf);
+    snprintf(
+        buf,
+        sizeof(buf),
+#if MOVEMENT_GSHOCK_DAY_JUSTIFY_LEFT
+        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d" : "%-2d",
+#else
+        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d" : "%2d",
+#endif
+        date_time.unit.day
+    );
+    watch_display_text(WATCH_POSITION_DAY_GSHOCK, buf);
+}
 
-    if (skip_seconds) {
-        buf[6] = '\0';
-    }
+static void clock_display_all(watch_date_time_t date_time, bool skip_seconds) {
+    char buf[8 + 1];
 
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, watch_utility_get_long_weekday(date_time), watch_utility_get_weekday(date_time));
-    watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-    watch_display_text(WATCH_POSITION_BOTTOM, buf + 2);
+
+    if (watch_get_lcd_type() == WATCH_LCD_TYPE_GSHOCK) {
+        clock_display_gshock_date(date_time);
+        snprintf(
+            buf,
+            sizeof(buf),
+            movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d%02d" : "%2d%02d%02d",
+            date_time.unit.hour,
+            date_time.unit.minute,
+            date_time.unit.second
+        );
+        if (skip_seconds) {
+            buf[4] = '\0';
+        }
+        watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    } else {
+        snprintf(
+            buf,
+            sizeof(buf),
+            movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d%02d%02d" : "%2d%2d%02d%02d",
+            date_time.unit.day,
+            date_time.unit.hour,
+            date_time.unit.minute,
+            date_time.unit.second
+        );
+
+        if (skip_seconds) {
+            buf[6] = '\0';
+        }
+
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+        watch_display_text(WATCH_POSITION_BOTTOM, buf + 2);
+    }
 }
 
 static bool clock_display_some(watch_date_time_t current, watch_date_time_t previous, bool skip_seconds) {
@@ -259,18 +302,30 @@ static void clock_display_low_energy(watch_date_time_t date_time) {
     }
     char buf[8 + 1];
 
-    snprintf(
-        buf,
-        sizeof(buf),
-        movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d%02d  " : "%2d%2d%02d  ",
-        date_time.unit.day,
-        date_time.unit.hour,
-        date_time.unit.minute
-    );
-
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, watch_utility_get_long_weekday(date_time), watch_utility_get_weekday(date_time));
-    watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
-    watch_display_text(WATCH_POSITION_BOTTOM, buf + 2);
+
+    if (watch_get_lcd_type() == WATCH_LCD_TYPE_GSHOCK) {
+        clock_display_gshock_date(date_time);
+        snprintf(
+            buf,
+            sizeof(buf),
+            movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d  " : "%2d%02d  ",
+            date_time.unit.hour,
+            date_time.unit.minute
+        );
+        watch_display_text(WATCH_POSITION_BOTTOM, buf);
+    } else {
+        snprintf(
+            buf,
+            sizeof(buf),
+            movement_clock_mode_24h() == MOVEMENT_CLOCK_MODE_024H ? "%02d%02d%02d  " : "%2d%2d%02d  ",
+            date_time.unit.day,
+            date_time.unit.hour,
+            date_time.unit.minute
+        );
+        watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+        watch_display_text(WATCH_POSITION_BOTTOM, buf + 2);
+    }
 }
 
 static void clock_start_tick_tock_animation(void) {

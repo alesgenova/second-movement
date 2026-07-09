@@ -81,6 +81,14 @@ bool counter_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_ACTIVATE:
             print_counter(state);
+            movement_display_time_in_date_area(movement_get_local_date_time());
+            break;
+        case EVENT_TICK:
+            // On the G-Shock, refresh the wall-clock time in the date area at the top of each minute.
+            if (event.subsecond == 0) {
+                watch_date_time_t now = movement_get_local_date_time();
+                if (now.unit.second == 0) movement_display_time_in_date_area(now);
+            }
             break;
         case EVENT_TIMEOUT:
             // ignore timeout

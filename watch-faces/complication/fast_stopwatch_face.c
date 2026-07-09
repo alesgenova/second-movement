@@ -108,11 +108,25 @@ static void _display_elapsed(fast_stopwatch_state_t *state, uint32_t ticks) {
 
     state->old_display.hours = hours;
 
-    if (hours) {
-        sprintf(buf, "%2lu", hours);
-        watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+    if (watch_get_lcd_type() == WATCH_LCD_TYPE_GSHOCK) {
+        if (hours) {
+            // Elapsed hours take over the date area, so hide the wall-clock time.
+            sprintf(buf, "%02lu", hours);
+            watch_display_text(WATCH_POSITION_DAY_GSHOCK, buf);
+            watch_display_text(WATCH_POSITION_MONTH_GSHOCK, "  ");
+            watch_clear_indicator(WATCH_INDICATOR_BOX_COLON_TOP);
+            watch_clear_indicator(WATCH_INDICATOR_BOX_COLON_BOTTOM);
+        } else {
+            // No elapsed hours: the date area shows the current time instead.
+            movement_display_time_in_date_area(movement_get_local_date_time());
+        }
     } else {
-        watch_display_text(WATCH_POSITION_TOP_RIGHT, "  ");
+        if (hours) {
+            sprintf(buf, "%2lu", hours);
+            watch_display_text(WATCH_POSITION_TOP_RIGHT, buf);
+        } else {
+            watch_display_text(WATCH_POSITION_TOP_RIGHT, "  ");
+        }
     }
 }
 
@@ -330,6 +344,12 @@ bool fast_stopwatch_face_loop(movement_event_t event, void *context) {
         case EVENT_TICK:
             _draw_indicators(state, event, elapsed);
             _display_elapsed(state, elapsed);
+            // On the G-Shock, refresh the wall-clock time in the date area at the
+            // top of each minute, but only when no elapsed hours occupy that area.
+            if (event.subsecond == 0 && !state->old_display.hours) {
+                watch_date_time_t now = movement_get_local_date_time();
+                if (now.unit.second == 0) movement_display_time_in_date_area(now);
+            }
             break;
         default:
             movement_default_loop_handler(event);

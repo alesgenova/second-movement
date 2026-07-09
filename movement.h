@@ -444,3 +444,7 @@ bool movement_set_accelerometer_motion_threshold(uint8_t new_threshold);
 float movement_get_temperature(void);
 
 bool movement_led_stay_off();
+
+// On the G-Shock (jolt) display, draws the time (hour:minute) from the given
+// date_time into the upper-right date area. No-op on other displays.
+void movement_display_time_in_date_area(watch_date_time_t date_time);
