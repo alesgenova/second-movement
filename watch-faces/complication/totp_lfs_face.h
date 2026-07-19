@@ -60,6 +60,7 @@ typedef struct {
     uint32_t current_code;
     uint8_t current_index;
     uint8_t face_index;
+    bool confirming_delete;   // showing the "dELETE" delete-confirmation prompt
 } totp_lfs_state_t;
 
 void totp_lfs_face_setup(uint8_t watch_face_index, void ** context_ptr);

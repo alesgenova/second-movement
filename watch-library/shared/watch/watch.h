@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "pins.h"
 
 #define SWCLK GPIO(GPIO_PORTA, 30)
@@ -69,7 +70,6 @@ typedef void (*watch_cb_t)(void);
 #include "watch_gpio.h"
 #include "watch_i2c.h"
 #include "watch_spi.h"
-#include "watch_uart.h"
 #include "watch_storage.h"
 #include "watch_deepsleep.h"
 
