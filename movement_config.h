@@ -56,7 +56,10 @@
     F(voltage) \
     F(rtccount) \
     F(finetune) \
-    F(nanosec)
+    F(nanosec) \
+    F(firmware_flasher) \
+    F(ir_rx) \
+    F(ir_tx)
 
 
 /* Determines the intensity of the led colors
