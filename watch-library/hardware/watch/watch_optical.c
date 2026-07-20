@@ -31,12 +31,15 @@
 #include "uart2.h"
 #include "watch.h"
 
-/* SERCOM topology, hardcoded for the watch's optical link:
- *   TX: PA12 (RED LED), mux D → SERCOM3 PAD[0]
- *   RX: PA04 (IRSENSE), mux D → SERCOM0 PAD[0]
- * Both pad 0, both TXPO_0 / RXPO_0. */
-#define OPTICAL_TX_SERCOM  3
-#define OPTICAL_RX_SERCOM  0
+/* SERCOM topology, hardcoded for the Jolt's optical link:
+ *   TX: PB22 (white LED), mux C → SERCOM0 PAD[2] → TXPO_2
+ *   RX: PB01 (IRSENSE),   mux C → SERCOM3 PAD[3] → RXPO_3 */
+#define OPTICAL_TX_SERCOM  0
+#define OPTICAL_TX_PMUX    HAL_GPIO_PMUX_SERCOM
+#define OPTICAL_TXPO       UART2_TXPO_2
+#define OPTICAL_RX_SERCOM  3
+#define OPTICAL_RX_PMUX    HAL_GPIO_PMUX_SERCOM
+#define OPTICAL_RXPO       UART2_RXPO_3
 
 typedef enum {
     STATE_CLOSED = 0,
@@ -121,9 +124,9 @@ bool watch_optical_open(watch_optical_dir_t dir, const watch_optical_config_t *c
          * and blinking OFF per pulse; IrDA TX is high-LED-duty (~80% on), a power
          * disadvantage; see the watch_optical.h banner. */
 
-        HAL_GPIO_RED_pmuxen(HAL_GPIO_PMUX_SERCOM_ALT);
+        HAL_GPIO_RED_pmuxen(OPTICAL_TX_PMUX);
         HAL_GPIO_RED_drvstr(1);
-        if (!uart2_open(UART2_TXPO_0, &sercom_cfg, UART2_RXPO_NONE, NULL)) {
+        if (!uart2_open(OPTICAL_TXPO, &sercom_cfg, UART2_RXPO_NONE, NULL)) {
             disengage_tx_pin();
             return false;
         }
@@ -144,8 +147,8 @@ bool watch_optical_open(watch_optical_dir_t dir, const watch_optical_config_t *c
         HAL_GPIO_IR_ENABLE_out();
         HAL_GPIO_IR_ENABLE_clr();       /* power on phototransistor bias */
         HAL_GPIO_IRSENSE_in();
-        HAL_GPIO_IRSENSE_pmuxen(HAL_GPIO_PMUX_SERCOM_ALT);
-        if (!uart2_open(UART2_TXPO_NONE, NULL, UART2_RXPO_0, &sercom_cfg)) {
+        HAL_GPIO_IRSENSE_pmuxen(OPTICAL_RX_PMUX);
+        if (!uart2_open(UART2_TXPO_NONE, NULL, OPTICAL_RXPO, &sercom_cfg)) {
             disengage_rx_pin();
             return false;
         }

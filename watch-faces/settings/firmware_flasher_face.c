@@ -922,8 +922,8 @@ static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, boo
     __disable_irq();
 
     /* Drop the Movement-side optical session and bring up BOTH directions raw:
-     * RX on SERCOM0, TX on SERCOM3. uart2_open also acquires the STANDBY clock
-     * chain (OSC16M + GCLK0 RUNSTDBY) and enables SERCOM0 RXC, our WFI wake. */
+     * RX on SERCOM3, TX on SERCOM0. uart2_open also acquires the STANDBY clock
+     * chain (OSC16M + GCLK0 RUNSTDBY) and enables SERCOM3 RXC, our WFI wake. */
     watch_optical_close();
 
     /* Leave the RED LED (TX) pin disengaged while listening so it can't leak into our
@@ -933,17 +933,17 @@ static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, boo
     HAL_GPIO_IR_ENABLE_out();
     HAL_GPIO_IR_ENABLE_clr();                 /* phototransistor bias ON */
     HAL_GPIO_IRSENSE_in();
-    HAL_GPIO_IRSENSE_pmuxen(HAL_GPIO_PMUX_SERCOM_ALT);
+    HAL_GPIO_IRSENSE_pmuxen(HAL_GPIO_PMUX_SERCOM);
 
     /* tx_invert/rx_invert -> CTRLA.TXINV/RXINV: data-bit invert (ISO 7816), not
      * optical polarity, no effect in IrDA. Different SERCOMs, so RX/TX baud differ. */
     uart2_sercom_config_t txc = {
-        .sercom = 3, .baud = tx_baud, .irda = irda, .invert = tx_invert, .run_in_standby = true,
+        .sercom = 0, .baud = tx_baud, .irda = irda, .invert = tx_invert, .run_in_standby = true,
     };
     uart2_sercom_config_t rxc = {
-        .sercom = 0, .baud = rx_baud, .irda = irda, .invert = rx_invert, .run_in_standby = true,
+        .sercom = 3, .baud = rx_baud, .irda = irda, .invert = rx_invert, .run_in_standby = true,
     };
-    uart2_open(UART2_TXPO_0, &txc, UART2_RXPO_0, &rxc);
+    uart2_open(UART2_TXPO_2, &txc, UART2_RXPO_3, &rxc);
 
     /* The end-of-image read-back verify must see true flash, not stale cache. */
     NVMCTRL->CTRLB.reg |= NVMCTRL_CTRLB_CACHEDIS;
@@ -958,7 +958,7 @@ static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, boo
     PM->SLEEPCFG.bit.SLEEPMODE = PM_SLEEPCFG_SLEEPMODE_STANDBY_Val;
     while (PM->SLEEPCFG.bit.SLEEPMODE != PM_SLEEPCFG_SLEEPMODE_STANDBY_Val) { }
 
-    NVIC_ClearPendingIRQ(SERCOM0_IRQn);
+    NVIC_ClearPendingIRQ(SERCOM3_IRQn);
 
     /* Into RAM. Never returns. */
     flasher_run(patch, first_block_id, first_block_addr,

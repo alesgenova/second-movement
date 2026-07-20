@@ -268,10 +268,10 @@ uint32_t firmware_flasher_crc32(const uint8_t *data, uint32_t len) {
  * ===================================================================== */
 
 /* SERCOM topology, must match watch_optical.c:
- *   RX: SERCOM0 / IRSENSE (PA04, RXPO 0); TX: SERCOM3 / RED LED (PA12, TXPO 0). */
-#define FLASHER_RX_SERCOM   SERCOM0
-#define FLASHER_TX_SERCOM   SERCOM3
-#define FLASHER_RX_IRQ      SERCOM0_IRQn
+ *   RX: SERCOM3 / IRSENSE (PB01, RXPO 3); TX: SERCOM0 / white LED (PB22, TXPO 2). */
+#define FLASHER_RX_SERCOM   SERCOM3
+#define FLASHER_TX_SERCOM   SERCOM0
+#define FLASHER_RX_IRQ      SERCOM3_IRQn
 
 /* RTC MODE0 COUNT32 ticks at 128 Hz (1024 Hz / DIV8; see rtc32.c), used to
  * time the ACK settle below. */
@@ -314,7 +314,7 @@ static void busy_wait_ticks(uint32_t ticks) {
 
 static void wfi_standby(void) {
     /* SLEEPCFG was set to STANDBY during arming, so WFI enters STANDBY. A
-     * pending SERCOM0 RXC (or any pending NVIC bit) wakes us; PRIMASK=1 keeps
+     * pending SERCOM3 RXC (or any pending NVIC bit) wakes us; PRIMASK=1 keeps
      * the ISR from dispatching, so we simply resume here and re-poll. */
     __DSB();
     __WFI();
@@ -459,7 +459,7 @@ static bool parser_feed(uint8_t b) {
 /* ---- ACK + frame handling (.ramfunc) -------------------------------- */
 
 /* Send the bare 2-byte frame-id ACK (the entire watch -> host vocabulary).
- * Settle first, then: blind our own sensor, engage the RED LED on SERCOM3 TX,
+ * Settle first, then: blind our own sensor, engage the LED on SERCOM0 TX,
  * transmit, disengage the LED again (so it can't leak into RX while we listen),
  * re-arm the sensor, drop any leaked bytes, and resync the parser.
  *
@@ -479,7 +479,7 @@ static void send_ack(uint16_t id) {
 
     HAL_GPIO_IR_ENABLE_set();                         /* sensor bias OFF (blind to our LED) */
     HAL_GPIO_RED_drvstr(1);
-    HAL_GPIO_RED_pmuxen(HAL_GPIO_PMUX_SERCOM_ALT);    /* engage LED on SERCOM3 TX */
+    HAL_GPIO_RED_pmuxen(HAL_GPIO_PMUX_SERCOM);        /* engage LED on SERCOM0 TX */
 
     tx_write(ack, n);
 
