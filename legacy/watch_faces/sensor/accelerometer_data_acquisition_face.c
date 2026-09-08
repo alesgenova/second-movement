@@ -101,6 +101,13 @@ bool accelerometer_data_acquisition_face_loop(movement_event_t event, void *cont
 
     switch (event.event_type) {
         case EVENT_ACTIVATE:
+            // Force the Step Counter to be turned off 
+            // immedietly in case it's on so this face can use the LIS2DW
+            if (movement_has_lis2dw() && movement_step_count_is_enabled()) {
+                movement_set_step_count_keep_off(true);
+                movement_disable_step_count(true);
+            }
+            // fall through
         case EVENT_TICK:
             switch (state->mode) {
                 case ACCELEROMETER_DATA_ACQUISITION_MODE_IDLE:
@@ -233,6 +240,7 @@ void accelerometer_data_acquisition_face_resign(void *context) {
     state->countdown_ticks = 0;
     state->repeat_ticks = 0;
     state->reading_ticks = 0;
+    movement_set_step_count_keep_off(false);
 }
 
 static void update(accelerometer_data_acquisition_state_t *state) {
@@ -448,13 +456,13 @@ static void start_reading(accelerometer_data_acquisition_state_t *state) {
 
     state->records[state->pos++] = record;
     lis2dw_fifo_t fifo;
-    lis2dw_read_fifo(&fifo, LIS2DW_FIFO_TIMEOUT); // dump the fifo, this starts a fresh round of data in continue_reading
+    lis2dw_read_fifo(&fifo); // dump the fifo, this starts a fresh round of data in continue_reading
 }
 
 static void continue_reading(accelerometer_data_acquisition_state_t *state) {
     printf("Continue reading\n");
     lis2dw_fifo_t fifo;
-    lis2dw_read_fifo(&fifo, LIS2DW_FIFO_TIMEOUT);
+    lis2dw_read_fifo(&fifo);
 
     fifo.count = min(fifo.count, 25); // hacky, but we need a consistent data rate; if we got a 26th data point, chuck it.
     uint8_t offset = 4 * (25 - fifo.count); // also hacky: we're sometimes short at the start. align to beginning of next second.
