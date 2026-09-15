@@ -762,7 +762,8 @@ void movement_play_note(watch_buzzer_note_t note, uint16_t duration_ms) {
 }
 
 void movement_play_signal(void) {
-    movement_play_sequence(signal_tune, BUZZER_PRIORITY_SIGNAL);
+    movement_play_sequence(movement_custom_signal_tunes_get_active_tune(),
+            BUZZER_PRIORITY_SIGNAL);
 }
 
 void movement_play_alarm(void) {
@@ -1228,6 +1229,7 @@ void app_init(void) {
         movement_state.settings.bit.le_interval = MOVEMENT_DEFAULT_LOW_ENERGY_INTERVAL;
 #endif
         movement_state.settings.bit.led_duration = MOVEMENT_DEFAULT_LED_DURATION;
+        movement_state.signal_enabled = true;
 
         movement_store_settings();
     }

@@ -355,11 +355,13 @@ bool stock_clock_face_loop(movement_event_t event, void *context) {
 
             break;
         case EVENT_BACKGROUND_TASK:
-            movement_play_alarm();
-            current = movement_get_local_date_time();
-            clock_disable_quick_timer(state);
-            clock_display_quick_timer(state, current, false);
-            break;
+            if (state->timer_active) {
+                movement_play_alarm();
+                current = movement_get_local_date_time();
+                clock_disable_quick_timer(state);
+                clock_display_quick_timer(state, current, false);
+                break;
+            }
         default:
             return movement_default_loop_handler(event);
     }

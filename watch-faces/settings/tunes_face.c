@@ -82,8 +82,21 @@ static void _tunes_face_set_active_tune(tunes_face_state_t *state) {
 }
 
 static void _tunes_face_play_tune(tunes_face_state_t *state) {
+    uint8_t* static_tune = NULL;
+    uint8_t* dynamic_tune = NULL;
+
     if (state->mode == TUNES_FACE_SIGNAL_MODE) {
-        movement_play_sequence(signal_tunes[state->signal_tune_index], 1);
+        static_tune = signal_tunes[state->signal_tune_index];
+        if (signal_dynamic_tunes[state->signal_tune_index])
+            dynamic_tune = signal_dynamic_tunes[state->signal_tune_index]();
+        else
+            dynamic_tune = NULL;
+        if (static_tune)
+            movement_play_sequence(static_tune, 1);
+        else if (dynamic_tune)
+            movement_play_sequence(dynamic_tune, 1);
+        else
+            printf("no tune?");
     } else {
         movement_play_sequence(alarm_tunes[state->alarm_tune_index], 1);
     }
@@ -92,7 +105,7 @@ static void _tunes_face_play_tune(tunes_face_state_t *state) {
 static void _tunes_face_next_tune(tunes_face_state_t *state) {
     if (state->mode == TUNES_FACE_SIGNAL_MODE) {
         state->signal_tune_index++;
-        if (state->signal_tune_index >= MOVEMENT_N_SIGNAL_TUNES || !signal_tunes[state->signal_tune_index]) {
+        if (state->signal_tune_index >= MOVEMENT_N_SIGNAL_TUNES || (!signal_tunes[state->signal_tune_index] && !signal_dynamic_tunes[state->signal_tune_index])) {
             state->signal_tune_index = 0;
         }
     } else {

@@ -30,6 +30,7 @@
 #include "watch_utility.h"
 #include "watch_common_display.h"
 #include "delay.h"
+#include "filesystem.h"
 
 typedef enum {
     alarm_setting_idx_alarm,
@@ -58,6 +59,22 @@ static uint8_t _get_weekday_idx(watch_date_time_t date_time) {
         date_time.unit.year--;
     }
     return (date_time.unit.day + 13 * (date_time.unit.month + 1) / 5 + date_time.unit.year + date_time.unit.year / 4 + 525 - 2) % 7;
+}
+
+static void _alarm_save_to_lfs(alarm_state_t *state) {
+    filesystem_write_file(LFS_FILENAME, (char *)state->alarm, sizeof(state->alarm));
+}
+
+static bool _alarm_restore_from_lfs(alarm_state_t *state) {
+    if (filesystem_file_exists(LFS_FILENAME)) {
+        if (filesystem_get_file_size(LFS_FILENAME) != sizeof(state->alarm)) {
+            printf("file exists but wrong size: %li (expected: %u)\n", filesystem_get_file_size(LFS_FILENAME), sizeof(*state));
+            return false;
+        }
+
+        return filesystem_read_file(LFS_FILENAME, (char *)state->alarm, sizeof(state->alarm));
+    }
+    return false;
 }
 
 static void _alarm_set_signal(alarm_state_t *state) {
@@ -241,11 +258,13 @@ void advanced_alarm_face_setup(uint8_t watch_face_index, void **context_ptr) {
         *context_ptr = malloc(sizeof(alarm_state_t));
         alarm_state_t *state = (alarm_state_t *)*context_ptr;
         memset(*context_ptr, 0, sizeof(alarm_state_t));
-        // initialize the default alarm values
-        for (uint8_t i = 0; i < ALARM_ALARMS; i++) {
-            state->alarm[i].day = ALARM_DAY_EACH_DAY;
-            state->alarm[i].beeps = 5;
-            state->alarm[i].pitch = 1;
+        if (!_alarm_restore_from_lfs(state)) {
+            // initialize the default alarm values
+            for (uint8_t i = 0; i < ALARM_ALARMS; i++) {
+                state->alarm[i].day = ALARM_DAY_EACH_DAY;
+                state->alarm[i].beeps = 5;
+                state->alarm[i].pitch = 1;
+            }
         }
         state->alarm_handled_minute = -1;
         _wait_ticks = -1;
@@ -274,6 +293,7 @@ void advanced_alarm_face_resign(void *context) {
     state->alarm_quick_ticks = false;
     _wait_ticks = -1;
     movement_request_tick_frequency(1);
+    _alarm_save_to_lfs(state);
 }
 
 movement_watch_face_advisory_t advanced_alarm_face_advise(void *context) {

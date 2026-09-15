@@ -2,12 +2,16 @@
 
 #include "movement_tunes_config.h"
 
+#include "movement.h"
+
 #include <stdlib.h>
 
 #include "watch_tcc.h"
 
 const int8_t* signal_tunes[MOVEMENT_N_SIGNAL_TUNES];
 const char* signal_tunes_names[MOVEMENT_N_SIGNAL_TUNES];
+int8_t* (*signal_dynamic_tunes[MOVEMENT_N_SIGNAL_TUNES])(void);
+
 
 static const int8_t DEFAULT_NOTE_DURATION = 4;
 
@@ -698,6 +702,46 @@ static const int8_t signal_tune_among_us[] = {
 #endif // SIGNAL_TUNE_AMONG_US || INCLUDE_SIGNAL_TUNE_AMONG_US
 
 
+#if defined SIGNAL_TUNE_ROMAN || defined INCLUDE_SIGNAL_TUNE_ROMAN
+
+// This is kind of a special signal tune.
+// It will signal differently each hour, using the roman notation (X/V/I)
+// I = C8, short
+// V = D8, medium
+// X = E8, long
+// 
+// IX / X / XI / XII / I / II / III / IV / V / VI / VII / VIII / IX
+
+#define NOTE_ROMAN_I BUZZER_NOTE_C8, 5
+#define NOTE_ROMAN_V BUZZER_NOTE_C8, 18
+#define NOTE_ROMAN_X BUZZER_NOTE_D8, 18
+#define NOTE_ROMAN_R BUZZER_NOTE_REST, 10
+
+static const char* signal_tune_roman_name = "RoMMaN";
+
+int8_t* signal_dynamic_tune_roman(void) {
+    static const int8_t tunes[12][16] = {
+        { NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_V, 0 },
+        { NOTE_ROMAN_V, 0 },
+        { NOTE_ROMAN_V, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_V, NOTE_ROMAN_R, NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_V, NOTE_ROMAN_R, NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_X, 0 },
+        { NOTE_ROMAN_X, 0 },
+        { NOTE_ROMAN_X, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+        { NOTE_ROMAN_X, NOTE_ROMAN_R, NOTE_ROMAN_I, NOTE_ROMAN_R, NOTE_ROMAN_I, 0 },
+    };
+
+    watch_date_time_t date_time = movement_get_local_date_time();
+    return (tunes[(date_time.unit.hour - 1) % 12]);
+}
+
+#endif // SIGNAL_TUNE_ROMAN || INCLUDE_SIGNAL_TUNE_ROMAN
+
+
 static void _movement_custom_signal_tunes_increment_index(uint8_t* index) {
     if (*index >= (MOVEMENT_N_SIGNAL_TUNES - 1)) {
         return;
@@ -710,6 +754,7 @@ static void _movement_custom_signal_tunes_increment_index(uint8_t* index) {
 void movement_custom_signal_tunes_init(void) {
     // memset((void*)signal_tunes, 0, sizeof(int8_t*) * MOVEMENT_N_SIGNAL_TUNES);
     // memset((void*)signal_tunes_names, 0, sizeof(char*) * MOVEMENT_N_SIGNAL_TUNES);
+    // memset((void*)signal_dynamic_tunes, 0, sizeof(char*) * MOVEMENT_N_SIGNAL_TUNES);
 
     uint8_t signal_tune_index = 0;
 
@@ -951,6 +996,16 @@ void movement_custom_signal_tunes_init(void) {
 #endif // SIGNAL_TUNE_AMONG_US
 #endif
 
+#if defined SIGNAL_TUNE_ROMAN || defined INCLUDE_SIGNAL_TUNE_ROMAN
+    _movement_custom_signal_tunes_increment_index(&signal_tune_index);
+    signal_tunes[signal_tune_index] = NULL; // dynamic tune
+    signal_dynamic_tunes[signal_tune_index] = signal_dynamic_tune_roman;
+    signal_tunes_names[signal_tune_index] = signal_tune_roman_name;
+#if defined SIGNAL_TUNE_ROMAN
+    active_signal_tune_index = signal_tune_index;
+#endif // SIGNAL_TUNE_ROMAN
+#endif
+
 
 
     signal_tune = signal_tunes[active_signal_tune_index];
@@ -960,7 +1015,19 @@ uint8_t movement_custom_signal_tunes_get_active_tune_index() {
     return active_signal_tune_index;
 }
 
+int8_t* movement_custom_signal_tunes_get_active_tune(void) {
+    if (signal_tunes[active_signal_tune_index] != NULL) {
+        return signal_tunes[active_signal_tune_index];
+    }
+    else {
+        if (signal_dynamic_tunes[active_signal_tune_index])
+            return signal_dynamic_tunes[active_signal_tune_index]();
+        else
+            return default_signal_tune;
+    }
+
+}
+
 void movement_custom_signal_tunes_set_active_tune_index(uint8_t index) {
     active_signal_tune_index = index;
-    signal_tune = signal_tunes[active_signal_tune_index];
 }

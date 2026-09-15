@@ -36,11 +36,10 @@
  * STOCK CLOCK FACE
  *
  * This is almost identical to clock_face, but it has two significant differences.
- * - it delegates the playing of the hourly chime to another face, merely displaying the bell indicator
- * - it toggles between 12/24H time display when pressing the alarm button
+ * - it handles the hourly signal, playing it only during the day (9AM-9PM).
+ * - hourly signal can be toggled using a long press of the light button
+ * - it implements a quick countdown timer through a long press of the alarm button
  * 
- * These changes effectively make this face identical to the stock F91W clock face, hence the name.
- *
  */
 
 #include "movement.h"
@@ -60,6 +59,7 @@ void stock_clock_face_setup(uint8_t watch_face_index, void ** context_ptr);
 void stock_clock_face_activate(void *context);
 bool stock_clock_face_loop(movement_event_t event, void *context);
 void stock_clock_face_resign(void *context);
+movement_watch_face_advisory_t stock_clock_face_advise(void *context);
 
 #define stock_clock_face ((const watch_face_t) { \
     stock_clock_face_setup, \

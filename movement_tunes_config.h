@@ -56,6 +56,7 @@
 #define INCLUDE_SIGNAL_TUNE_NEO_GEO
 #define INCLUDE_SIGNAL_TUNE_BOSUN_WHISTLE
 #define INCLUDE_SIGNAL_TUNE_AMONG_US
+#define INCLUDE_SIGNAL_TUNE_ROMAN
 
 /* Custom alarm tune. Check movement_custom_alarm_tunes.h for options. */
 #define INCLUDE_ALARM_TUNE_GIGI_DAG

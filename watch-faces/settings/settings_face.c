@@ -81,6 +81,38 @@ static void beep_setting_advance(void) {
     }
 }
 
+static void signal_toggle_display(uint8_t subsecond) {
+    (void) subsecond;
+
+    watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "SIG", "SI");
+    if (movement_signal_enabled()) {
+	watch_set_indicator(WATCH_INDICATOR_BELL);
+        watch_display_text(WATCH_POSITION_BOTTOM, "   On ");
+    } else {
+	watch_clear_indicator(WATCH_INDICATOR_BELL);
+        watch_display_text(WATCH_POSITION_BOTTOM, "   OFF");
+    }
+}
+
+movement_watch_face_advisory_t settings_face_advise(void *context) {
+    movement_watch_face_advisory_t retval = { 0 };
+    settings_state_t *state = (settings_state_t *) context;
+
+    if (movement_signal_enabled()) {
+        watch_date_time_t date_time = movement_get_local_date_time();
+        retval.wants_background_task = date_time.unit.minute == 0 && date_time.unit.hour >= 9 && date_time.unit.hour <= 21;
+    }
+
+    return retval;
+}
+
+static void signal_toggle_advance(void) {
+    movement_set_signal_enabled(!movement_signal_enabled());
+    if (movement_signal_enabled())
+	movement_play_signal();
+    signal_toggle_display(1);
+}
+
 static void signal_setting_display(uint8_t subsecond) {
     watch_display_text_with_fallback(WATCH_POSITION_TOP_LEFT, "SIG", "SI");
     watch_display_text(WATCH_POSITION_BOTTOM, "SIGNAL");
@@ -337,6 +369,9 @@ void settings_face_setup(uint8_t watch_face_index, void ** context_ptr) {
         state->settings_screens[current_setting].display = beep_setting_display;
         state->settings_screens[current_setting].advance = beep_setting_advance;
         current_setting++;
+        state->settings_screens[current_setting].display = signal_toggle_display;
+        state->settings_screens[current_setting].advance = signal_toggle_advance;
+        current_setting++;
         state->settings_screens[current_setting].display = signal_setting_display;
         state->settings_screens[current_setting].advance = signal_setting_advance;
         current_setting++;
@@ -411,6 +446,10 @@ bool settings_face_loop(movement_event_t event, void *context) {
             break;
         case EVENT_TIMEOUT:
             movement_move_to_page(0);
+            break;
+        case EVENT_BACKGROUND_TASK:
+            if (movement_signal_enabled())
+                movement_play_signal();
             break;
         default:
             return movement_default_loop_handler(event);
