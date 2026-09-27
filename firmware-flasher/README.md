@@ -34,6 +34,15 @@ code. RAM TUs may not call anything outside themselves (libc/libgcc live in
 flash); `flasher-rules.mk`'s stamp rules fail the build if a banned symbol
 appears.
 
+UltraPatch needs a separate `PatchApply` state of about 6.7 KiB. If it cannot
+fit above Movement's current heap break and below the overlay, the launcher
+places it at the aligned linker `end` (the original heap base), provided it
+still fits below the overlay with 512 bytes of margin. The first patch frame
+may still live in that heap: `flasher_run` copies it into the overlay before
+the decoder initializes `PatchApply`. Movement and its heap allocations never
+run again after the hand-off. If even the original heap window is too small,
+the patch parks without an ACK and a block-0 full flash can recover over IR.
+
 Row writes retry a few times on NVMCTRL errors/timeouts and can rest between
 bursts (`FLASHER_BURST_WRITE_COOLDOWN`, currently 0) to duty-cycle the NVM
 current on the coin cell; a row that keeps failing parks the session,
