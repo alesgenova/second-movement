@@ -237,6 +237,7 @@ typedef struct {
 #ifndef __EMSCRIPTEN__
 #ifdef FIRMWARE_FLASHER_ULTRAPATCH
 #include "firmware_flasher_ultrapatch.h"   /* state-size probe for the aux malloc */
+extern uint8_t end[];   /* linker heap base, reusable after the RAM flasher takes over */
 #endif
 static bool     firmware_flasher_overlay_load(void);
 static void     firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, bool irda,
@@ -566,19 +567,31 @@ static bool handle_test_frame(firmware_flasher_state_t *state,
         if (!firmware_flasher_overlay_load()) return true;   // swallowed, no ACK
 #ifdef FIRMWARE_FLASHER_ULTRAPATCH
         // `aux` carries the UltraPatch decoder state (PatchApply), not a source
-        // window. CRITICAL: probe the break first — newlib's _sbrk has no limit
-        // check, so an oversized malloc corrupts the heap and still returns
-        // non-NULL; and the overlay base is a hard ceiling (an allocation past
-        // it would overlap the just-loaded flasher). If it can't be allocated,
-        // still arm: the backend refuses to run without state, the session
-        // parks, and the host recovers with a block-0 full flash over IR --
-        // no refusal state, Movement is already forfeit.
+        // window. Try malloc only when the heap break leaves enough room below
+        // the overlay; newlib's _sbrk does not enforce that ceiling. A watch
+        // with many face contexts may have no such room even though the static
+        // RAM below the overlay is large enough for PatchApply. In that case
+        // reuse the heap from the linker `end` symbol. arm_and_run closes
+        // Movement's optical session and disables interrupts; flasher_run
+        // copies first_block into the overlay before the decoder touches aux.
+        // No Movement code or heap allocation runs after that until reset.
+        // If even the static window is too small, arm with NULL and park for
+        // a block-0 full-flash takeover as before.
         uint32_t need = firmware_flasher_ultrapatch_state_size();
         uint8_t *aux = NULL;
         uintptr_t brk = (uintptr_t)_sbrk(0);  // current heap top
+        uint32_t available = brk >= 0x20000000u && brk < FLASHER_OVERLAY_BASE
+                           ? (uint32_t)(FLASHER_OVERLAY_BASE - brk) : 0u;
         if (brk >= 0x20000000u && brk < FLASHER_OVERLAY_BASE &&
-            (uint32_t)(FLASHER_OVERLAY_BASE - brk) >= need + 512u /*allocator margin*/) {
+            available >= need + 512u /*allocator margin*/) {
             aux = malloc(need);   // guaranteed to fit
+        }
+        if (aux == NULL) {
+            uintptr_t heap_base = ((uintptr_t)end + 7u) & ~(uintptr_t)7u;
+            if (heap_base >= 0x20000000u && heap_base < FLASHER_OVERLAY_BASE &&
+                (uint32_t)(FLASHER_OVERLAY_BASE - heap_base) >= need + 512u) {
+                aux = (uint8_t *)heap_base;
+            }
         }
         firmware_flasher_patch_t pd = {
             .aux = aux, .aux_mask = 0u,
