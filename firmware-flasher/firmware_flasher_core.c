@@ -256,7 +256,7 @@ uint32_t firmware_flasher_crc32(const uint8_t *data, uint32_t len) {
     }
     /* DSU returns the non-complemented CRC; XOR with 0xFFFFFFFF to match the
      * standard IEEE 802.3 / zlib.crc32 variant. A timed-out (never-DONE) engine
-     * yields 0, which will not match the descriptor's image_crc32. */
+     * yields 0, which will not match the EXIT descriptor's new_crc. */
     uint32_t crc = (DSU->STATUSA.reg & DSU_STATUSA_DONE) ? (DSU->DATA.reg ^ 0xFFFFFFFFu) : 0u;
 
     PAC->WRCTRL.reg = PAC_WRCTRL_PERID(ID_DSU) | PAC_WRCTRL_KEY_SET;
@@ -367,6 +367,7 @@ static void tx_write(const uint8_t *buf, uint32_t n) {
 #else /* hosted (non-ARM) test build: the test driver provides the hardware layer */
 
 void send_ack(uint16_t id);
+void send_nack(uint16_t id);
 bool rx_read_byte(uint8_t *out);
 void wfi_standby(void);
 void host_reboot(void);
@@ -490,6 +491,14 @@ static void send_ack(uint16_t id) {
     parser_reset();
 }
 
+/* The NACK: the id XOR IR_FLASHER_NACK_MASK, sent exactly like an ACK (see
+ * IR_FLASHER_NACK): "received intact, never accepted in this state". Every
+ * permanent refusal below sends one; a retryable failure (a row write that
+ * failed) stays silent, so the host resends. */
+static void send_nack(uint16_t id) {
+    send_ack(IR_FLASHER_NACK(id));
+}
+
 #endif /* __arm__ */
 
 /* ---- Session state (shared by both modes) ---------------------------- */
@@ -529,8 +538,11 @@ static bool s_patch_mode;
  *        patch, which applies in place). The source parks the frame in P,
  *        latches s_takeover, and returns FLASHER_PULL_END; the decoder
  *        unwinds and flasher_run restarts in full-flash mode on that block.
- *      * anything else (out-of-sequence, wrong kind, premature EXIT) ->
- *        do NOTHING (no ACK), keep listening; silence makes the host resend.
+ *      * anything else (out-of-sequence, oversized, wrong kind, a TEST frame
+ *        or ENTER from a restarted host, a premature EXIT) -> NACK: it can
+ *        never be accepted mid-apply, so the host must stop resending it.
+ *        (A corrupted frame never gets this far: it fails the CRC, earns
+ *        silence, and the host resends.)
  * ===================================================================== */
 
 /* Pull-source verdicts (FLASHER_PULL_END / _BYTE) come from the shared
@@ -553,18 +565,28 @@ int patch_pull_byte(void *ctx, uint8_t *out) {
             uint8_t b;
             if (!rx_read_byte(&b)) { wfi_standby(); continue; }
             if (!parser_feed(b)) continue;
-            if (P.out_flags & IR_FLASHER_FLAG_VERIFY) continue;  /* premature EXIT: ignore */
+            /* A premature EXIT (the host believes the stream is complete, the
+             * decoder wants more), or a TEST frame / ENTER from a restarted
+             * host (never data; see handle_frame): never acceptable mid-apply. */
+            if (P.out_flags & (IR_FLASHER_FLAG_VERIFY | IR_FLASHER_FLAG_TEST | IR_FLASHER_FLAG_ENTER)) {
+                send_nack(P.out_id);
+                continue;
+            }
             bool is_patch = (P.out_flags & IR_FLASHER_FLAG_PATCH) != 0;
             if (!is_patch) {
                 if (P.out_id == 0 && P.out_len == IR_FLASHER_BLOCK_PAYLOAD) {
                     s_takeover = true;             /* full-flash takeover; frame parked in P */
                     return FLASHER_PULL_END;
                 }
-                continue;                          /* other non-patch frame: ignore */
+                send_nack(P.out_id);               /* other non-patch frame */
+                continue;
             }
             if (P.out_id == s_body_id) { send_ack(s_body_id); continue; }  /* dup */
-            if (P.out_id != (uint16_t)(s_body_id + 1)) continue;  /* out-of-sequence: ignore */
-            if (P.out_len > FLASHER_ROW_SIZE) continue;  /* oversized for a body frame: ignore */
+            if (P.out_id != (uint16_t)(s_body_id + 1) ||   /* out-of-sequence */
+                P.out_len > FLASHER_ROW_SIZE) {             /* oversized for a body frame */
+                send_nack(P.out_id);
+                continue;
+            }
             s_body_id  = P.out_id;
             s_body_len = P.out_len;
             for (uint16_t k = 0; k < s_body_len; k++) s_body[k] = P.crcbuf[4 + k];
@@ -587,21 +609,21 @@ int patch_pull_byte(void *ctx, uint8_t *out) {
  *       restart as a FULL flash (a patch is applied in place and can't be
  *       re-run from the start; the only restart is a verbatim reflash). This
  *       switches the mode to uf2-like permanently.
- *   - block kind must match the current mode             : else ignore (silent).
+ *   - block kind must match the current mode             : else NACK.
  *   - id == last_id                                      : dup (our ACK was lost) -> re-ACK only.
  *   - id == last_id + 1                                  : the next block -> commit, ACK, advance.
  *   - id == 0 in uf2-like mode (restart)                 : commit, ACK, last_id = 0.
- *   - anything else (incl. a patch restart)              : ignore (silent).
+ *   - anything else (incl. a patch restart)              : NACK.
  *
  * The very first block folds into the "next" case (s_last_id starts at -1).
- * A commit that fails leaves last_id untouched and sends no ACK, so the host
- * retransmits. The per-row target is bounds-checked inside write_row (absolute
+ * A commit that fails leaves last_id untouched and sends NOTHING (a failed
+ * write is retryable, not a refusal), so the host retransmits. The per-row target is bounds-checked inside write_row (absolute
  * bootloader/EEPROM guard); the EXIT CRC is the whole-image integrity gate.
  *
  * NOTE: the live patch apply runs entirely in patch_backend_run (it consumes the
  * body stream through the pull source), so commit_block only ever handles
  * uf2-like rows or a stray patch frame arriving after the apply. It writes uf2
- * rows; a stray patch frame is ignored (only a duplicate of the last id is
+ * rows; a stray patch frame is NACKed (only a duplicate of the last id is
  * re-ACKed); it must never apply. */
 static void commit_block(uint16_t id, bool is_patch,
                                          uint32_t addr, const uint8_t *row) {
@@ -611,7 +633,8 @@ static void commit_block(uint16_t id, bool is_patch,
         s_last_id = -1;
     }
     if (is_patch != s_patch_mode) {
-        return;                       /* wrong kind for this mode: ignore */
+        send_nack(id);                /* wrong kind for this mode */
+        return;
     }
     if (s_last_id >= 0 && id == (uint16_t)s_last_id) {
         send_ack(id);                 /* duplicate of the last committed block */
@@ -620,17 +643,19 @@ static void commit_block(uint16_t id, bool is_patch,
     /* A non-duplicate PATCH frame here can only be a stray AFTER the apply has
      * run (the live patch stream is consumed through the pull source, never
      * here). We must NOT "apply" it: ACKing it would mask a failed apply by
-     * waving the host through to an EXIT-CRC hang. Ignore it; the host stays
-     * honestly stuck on the failing frame, and a uf2 block-0 (handled above)
-     * still recovers via reflash. */
+     * waving the host through to an EXIT-CRC hang. NACK it instead: the host
+     * learns the apply is over (finished, or failed and parked), and a uf2
+     * block-0 (handled above) still recovers via reflash. */
     if (is_patch) {
+        send_nack(id);
         return;
     }
     /* uf2-like row from here on (is_patch == s_patch_mode == false). */
     bool is_next    = (id == (uint16_t)(s_last_id + 1));
     bool is_restart = (id == 0);      /* a full flash may restart from block 0 */
     if (!is_next && !is_restart) {
-        return;                       /* out-of-sequence: ignore */
+        send_nack(id);                /* out-of-sequence */
+        return;
     }
     if (firmware_flasher_write_row(addr, row, 0u /* link-paced */)) {
         s_last_id = (int32_t)id;
@@ -642,28 +667,43 @@ static void commit_block(uint16_t id, bool is_patch,
 /* Act on the frame currently held in P. Returns true only when an EXIT frame
  * confirmed the whole image (the caller then reboots into the new firmware). */
 static bool handle_frame(void) {
+    /* A TEST frame is never data. The launcher only hands off after ENTER, so a
+     * TEST frame (or an ENTER) here comes from a host that restarted and is
+     * re-running its link test, believing nothing will be written. NACK it:
+     * its uf2-like payload must not be committed as a row, and the NACK tells
+     * the host the watch is already flashing. */
+    if (P.out_flags & (IR_FLASHER_FLAG_TEST | IR_FLASHER_FLAG_ENTER)) {
+        send_nack(P.out_id);
+        return false;
+    }
+
     if (P.out_flags & IR_FLASHER_FLAG_VERIFY) {
-        /* EXIT: the 12-byte payload is the image descriptor {base, total_length,
-         * image_crc32}. Validate the range BEFORE the DSU touches it: a bad,
-         * unaligned, or out-of-bounds pointer can bus-error the CRC engine and
-         * wedge this loop. A malformed EXIT is ignored (no ACK -> host retries). */
-        if (P.out_len != IR_FLASHER_DESCRIPTOR_SIZE) return false;
-        uint32_t base = (uint32_t)P.crcbuf[4]  | ((uint32_t)P.crcbuf[5]  << 8)
-                      | ((uint32_t)P.crcbuf[6]  << 16) | ((uint32_t)P.crcbuf[7]  << 24);
-        uint32_t len  = (uint32_t)P.crcbuf[8]  | ((uint32_t)P.crcbuf[9]  << 8)
-                      | ((uint32_t)P.crcbuf[10] << 16) | ((uint32_t)P.crcbuf[11] << 24);
-        uint32_t want = (uint32_t)P.crcbuf[12] | ((uint32_t)P.crcbuf[13] << 8)
-                      | ((uint32_t)P.crcbuf[14] << 16) | ((uint32_t)P.crcbuf[15] << 24);
-        if ((base & 3u) != 0) return false;                       /* DSU needs 4-aligned addr */
-        if ((len & (FLASHER_ROW_SIZE - 1u)) != 0) return false;   /* row- (=> 4-) aligned */
-        if (!firmware_flasher_range_writable(base, len)) return false;  /* nonzero + in app flash */
-        if (firmware_flasher_crc32((const uint8_t *)base, len) == want) {
+        /* EXIT: the 12-byte payload is the image descriptor {base_addr,
+         * new_size, new_crc}. Validate the range BEFORE the DSU touches it: a
+         * bad, unaligned, or out-of-bounds pointer can bus-error the CRC engine
+         * and wedge this loop. A malformed EXIT, like a failed verify, is NACKed. */
+        if (P.out_len != IR_FLASHER_DESCRIPTOR_SIZE) { send_nack(P.out_id); return false; }
+        uint32_t base_addr = (uint32_t)P.crcbuf[4]  | ((uint32_t)P.crcbuf[5]  << 8)
+                           | ((uint32_t)P.crcbuf[6]  << 16) | ((uint32_t)P.crcbuf[7]  << 24);
+        uint32_t new_size  = (uint32_t)P.crcbuf[8]  | ((uint32_t)P.crcbuf[9]  << 8)
+                           | ((uint32_t)P.crcbuf[10] << 16) | ((uint32_t)P.crcbuf[11] << 24);
+        uint32_t new_crc   = (uint32_t)P.crcbuf[12] | ((uint32_t)P.crcbuf[13] << 8)
+                           | ((uint32_t)P.crcbuf[14] << 16) | ((uint32_t)P.crcbuf[15] << 24);
+        if ((base_addr & 3u) != 0 ||                                       /* DSU needs 4-aligned addr */
+            (new_size & (FLASHER_ROW_SIZE - 1u)) != 0 ||                   /* row- (=> 4-) aligned */
+            !firmware_flasher_range_writable(base_addr, new_size)) {       /* nonzero + in app flash */
+            send_nack(P.out_id);
+            return false;
+        }
+        if (firmware_flasher_crc32((const uint8_t *)base_addr, new_size) == new_crc) {
             send_ack(P.out_id);   /* echo the id => "passed"; caller reboots */
             return true;
         }
-        /* Mismatch: stay silent. The host gets no echo, prompts the user, and on
-         * a resend we overwrite toward a valid image rather than rebooting into a
-         * brick. The watch stays in the flasher either way. */
+        /* Mismatch: NACK. The host knows for sure the image is bad (silence
+         * would be ambiguous with "verified, rebooted, ACK lost"), and the watch
+         * stays in the flasher: a resend overwrites toward a valid image rather
+         * than rebooting into a brick. */
+        send_nack(P.out_id);
         return false;
     }
 
@@ -671,7 +711,7 @@ static bool handle_frame(void) {
         /* A patch frame seen by this loop is a re-sent LAST body frame whose ACK
          * was lost (the live patch stream is consumed through the pull source,
          * not here): commit_block re-ACKs it as a duplicate (id == s_last_id) and
-         * ignores any other patch frame. It has no addr/row, so we pass 0/NULL. */
+         * NACKs any other patch frame. It has no addr/row, so we pass 0/NULL. */
         commit_block(P.out_id, true, 0, (const uint8_t *)0);
     } else if (P.out_len == IR_FLASHER_BLOCK_PAYLOAD) {
         /* A uf2-like data block: a full flash, or the patch->uf2 block-0 fallback
@@ -681,6 +721,8 @@ static bool handle_frame(void) {
                       | ((uint32_t)P.crcbuf[6] << 16)
                       | ((uint32_t)P.crcbuf[7] << 24);
         commit_block(P.out_id, false, addr, &P.crcbuf[8]);
+    } else {
+        send_nack(P.out_id);   /* neither EXIT nor a data block of either kind */
     }
     return false;
 }

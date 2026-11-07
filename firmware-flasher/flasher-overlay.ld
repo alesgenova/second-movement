@@ -13,12 +13,15 @@
  * face's firmware_flasher_overlay_load() copies-and-verifies it to the fixed
  * VMA window here at first-block time, just before the point of no return.
  * The window sits near the top of RAM, overlapping what is normally heap
- * headroom: the loader refuses to copy unless the heap break and the live
- * stack both clear the window (see the face), and above the overlay only the
- * stack remains, guarded at runtime by a canary at __flovl_vma_end.
+ * headroom: the loader refuses to copy unless the live stack clears the
+ * window, but deliberately copies over any heap above the base (the face's
+ * hand-off has already snapshotted what it needs onto the stack). Above the
+ * overlay only the stack remains, guarded at runtime by a canary at
+ * __flovl_vma_end.
  *
- * The base and the stack-reserve ceiling are mirrored in
- * firmware_flasher_core.h (FLASHER_OVERLAY_BASE); keep them in lockstep.
+ * The base address below is the ONLY place it is set: the C code reads it
+ * back through __flovl_vma_start (FLASHER_OVERLAY_BASE in
+ * firmware_flasher_core.h), so moving the overlay needs no other edit.
  */
 SECTIONS {
   .flovl 0x20005000 : ALIGN(4) {
@@ -32,8 +35,8 @@ SECTIONS {
 __flovl_lma_start = LOADADDR(.flovl);
 
 ASSERT(__flovl_vma_start >= _ebss,
-       "flasher overlay overlaps .bss; raise FLASHER_OVERLAY_BASE")
+       "flasher overlay overlaps .bss; raise the .flovl base in flasher-overlay.ld")
 /* >= 2.5 KiB must remain above the overlay (canary + the whole flash
- * session's stack); grow the budget by LOWERING the base in both places. */
+ * session's stack); grow the budget by LOWERING the .flovl base above. */
 ASSERT(__flovl_vma_end <= 0x20007600,
-       "flasher overlay overruns the stack reserve; lower FLASHER_OVERLAY_BASE")
+       "flasher overlay overruns the stack reserve; lower the .flovl base in flasher-overlay.ld")

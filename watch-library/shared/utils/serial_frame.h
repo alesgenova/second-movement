@@ -133,7 +133,8 @@ typedef struct {
 } serial_frame_parser_t;
 
 /* The frame CRC-32 (zlib variant; DSU hardware on SAML22) over an arbitrary
- * buffer. SAML22: `data` 4-byte aligned, `len` a multiple of 4, NVMCTRL idle. */
+ * buffer. SAML22: `data` 4-byte aligned, `len` a multiple of 4, NVMCTRL idle.
+ * len == 0 returns 0, the CRC-32 of nothing, without touching the hardware. */
 uint32_t serial_frame_crc32(const uint8_t *data, uint32_t len);
 
 /* Reset the parser to a clean HUNT state and install the dispatch callback.

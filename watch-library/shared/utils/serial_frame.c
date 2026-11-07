@@ -130,6 +130,10 @@ static uint32_t compute_crc32(const uint8_t *data, uint32_t len) {
  * been loaded. Same constraints as the frame path on SAML22: `data` 4-byte
  * aligned, `len` a multiple of 4, NVMCTRL idle. */
 uint32_t serial_frame_crc32(const uint8_t *data, uint32_t len) {
+    /* The CRC-32 of nothing is 0 (== zlib.crc32(b"")). Answer it directly:
+     * the DSU path spins until the engine reports DONE, and nothing promises
+     * it ever does for a zero-length run. */
+    if (len == 0) return 0u;
     return compute_crc32(data, len);
 }
 

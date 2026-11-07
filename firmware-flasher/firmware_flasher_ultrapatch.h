@@ -28,15 +28,17 @@
 /*
  * Cross-TU contract between the firmware-flasher face and the UltraPatch
  * decoder translation unit (firmware_flasher_ultrapatch.c). Only compiled into
- * FIRMWARE_FLASHER_ULTRAPATCH builds; the default build uses the face's own
- * detools decoder and neither side of this contract exists.
+ * FIRMWARE_FLASHER_ULTRAPATCH builds (the default); a
+ * FIRMWARE_FLASHER_ULTRAPATCH=0 build links firmware_flasher_detools.c instead
+ * and neither side of this contract exists.
  *
- * The decoder TU is RAM-resident IN ITS ENTIRETY: it is compiled with
- * -fno-jump-tables and post-processed with
- * `objcopy --prefix-alloc-sections=.ramfunc`, which lands its .text AND its
- * .rodata (UltraPatch has const tables) in the linker's .data output section,
- * copied to RAM at boot alongside .ramfunc. That is what makes it legal to run
- * while NVMCTRL is erasing the flash it decodes into.
+ * The decoder TU is RAM-resident IN ITS ENTIRETY: the build post-processes it
+ * with `objcopy --prefix-alloc-sections=.flovl`, which routes its .text AND
+ * its .rodata (UltraPatch has const tables) into the load-on-demand flasher
+ * overlay (flasher-overlay.ld), copied to RAM by the face at first-block time,
+ * not at boot. That is what makes it legal to run while NVMCTRL is erasing the
+ * flash it decodes into. It follows that firmware_flasher_ultrapatch_state_size()
+ * may only be called after the overlay is loaded.
  */
 
 #include <stdbool.h>
@@ -46,7 +48,7 @@
  * The patchable image window, compile-time constants of the decoder
  * (PATCH_IMAGE_BASE / PATCH_IMAGE_CAPACITY). They mirror the face's writable
  * region [FLASHER_BOOTLOADER_END, FLASHER_APP_FLASH_END); the face's patch
- * ENTER validation requires base == FLASHER_ULTRAPATCH_IMAGE_BASE, so a patch
+ * ENTER validation requires base_addr == FLASHER_ULTRAPATCH_IMAGE_BASE, so a patch
  * for any other geometry is refused before the point of no return.
  */
 #define FLASHER_ULTRAPATCH_IMAGE_BASE      0x2000u
@@ -55,9 +57,9 @@
 /* ---- Provided by firmware_flasher_ultrapatch.c (RAM-resident) --------- */
 
 /* sizeof(PatchApply): how many bytes of caller-owned decoder state
- * firmware_flasher_ultrapatch_run needs. The launcher allocates this (heap)
- * before the point of no return; the buffer needs 4-byte alignment (malloc's
- * is fine). Callable from flash-resident code. */
+ * firmware_flasher_ultrapatch_run needs. The launcher places this buffer at
+ * the start of Movement's heap at the point of no return; it needs 4-byte
+ * alignment. Callable from flash-resident code once the overlay is loaded. */
 uint32_t firmware_flasher_ultrapatch_state_size(void);
 
 /* Run one whole patch apply: pulls the blob (envelope + body) byte-by-byte

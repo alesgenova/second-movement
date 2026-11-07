@@ -25,10 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-/* newlib heap-break query, used to check an aux window fits BEFORE malloc (its
- * _sbrk has no limit check, so an oversized malloc corrupts the heap instead of
- * failing). Declared here to avoid pulling <unistd.h>; only _sbrk is linked. */
-extern void *_sbrk(int incr);
 #include "firmware_flasher_face.h"
 #include "watch.h"
 #include "movement_optical.h"
@@ -45,8 +41,10 @@ extern void *_sbrk(int incr);
  *  CRC32}; an ACK is just the frame's 2-byte id echoed back (no framing,
  *  no CRC, repeated N times for redundancy on the weak return path). The
  *  host blocks waiting for the id it expects, so a corrupted ACK simply
- *  fails to match and the host retransmits. The flag bits (TEST / ENTER /
- *  VERIFY / PATCH) are defined below.
+ *  fails to match and the host retransmits. A NACK is the same thing with
+ *  the id XORed with a fixed mask (IR_FLASHER_NACK): "received intact, and refused for
+ *  good in my current state". The flag bits (TEST / ENTER / VERIFY / PATCH)
+ *  are defined in firmware_flasher_core.h.
  *
  *  The session runs as a sequence of stages. The golden rule for the data
  *  stages is STOP-AND-WAIT: the watch ACKs a frame ONLY after it has fully
@@ -58,17 +56,23 @@ extern void *_sbrk(int incr);
  *     A link-reliability warm-up. For each TEST frame the watch flips to
  *     TX, ACKs it, flips back to RX, and STAYS in this stage. Nothing is
  *     committed. It measures whether the round-trip is good enough to
- *     flash, and it stays here until an ENTER frame arrives.
+ *     flash, and it stays here until an ENTER frame arrives. A data block
+ *     is NACKed: not flashing yet. An EXIT gets no answer at all before the
+ *     hand-off: its NACK is reserved for the RAM flasher's failed image check.
  *
  *  2. ENTER  (flag = ENTER; the point we choose full vs. patch)
  *     - Plain ENTER (empty payload): a FULL (uf2-like) flash. ACK + advance.
  *     - Patch ENTER (ENTER|PATCH|VERIFY, 20-byte reference descriptor): a
  *       DELTA flash. The watch CRCs its CURRENT flash over the reference
  *       range and ACKs ONLY if it matches: proof the patch targets the
- *       right base image. On mismatch it does NOTHING (no ACK); the host
- *       retries or gives up. A repeated ENTER (our ACK was lost) is just
+ *       right base image. On mismatch, or any ENTER it can't take, it
+ *       NACKs and stays in its stage. A repeated ENTER (our ACK was lost) is just
  *       re-ACKed; re-verifying is harmless because nothing has been
  *       written yet. ENTER is the last reversible moment.
+ *     - (UltraPatch) a patch ENTER with ref_size 0 has an EMPTY reference:
+ *       the "patch" is a full image compressed against nothing, i.e. a
+ *       compressed full flash. It goes through exactly the same check (the
+ *       CRC of nothing is 0) and runs as an ordinary patch session.
  *
  *  3. FIRST DATA BLOCK  ->  POINT OF NO RETURN
  *     Once ENTER is ACKed the watch waits for the first data block. It does
@@ -76,13 +80,16 @@ extern void *_sbrk(int incr);
  *     to the RAM-resident flasher (arm_and_run), which reconfigures the
  *     link raw and never returns. From here the firmware is being
  *     overwritten; the only exits are a verified image (reboot) or staying
- *     parked awaiting a retry.
+ *     parked awaiting a retry. The LCD switches to "IR uPdAtE" here and keeps
+ *     it for the whole session. A frame that is not a valid first block for
+ *     the session is NACKed; a TEST frame drops the watch back to stage 1
+ *     (the host restarted).
  *
  *  4. DATA STREAM  (in the RAM flasher)
  *     Both kinds obey the same stop-and-wait policy:
  *         * next-in-sequence  -> act, ACK, advance
  *         * duplicate of last -> re-ACK only (our ACK was lost), no re-act
- *         * out-of-sequence / wrong kind -> do NOTHING (no ACK)
+ *         * out-of-sequence / wrong kind / TEST / ENTER -> NACK
  *         * act (write) failed -> do NOTHING (no ACK) so the host resends
  *     - FULL: the main receive loop acts on each block {addr, 256-byte row}:
  *       erase+write the row, then ACK (id 0 also restarts a full flash from
@@ -99,14 +106,17 @@ extern void *_sbrk(int incr);
  *  5. EXIT / VERIFY  (flag = VERIFY, payload = 12-byte image descriptor)
  *     The terminator. The watch DSU-CRCs the freshly written region against
  *     the descriptor. Match -> ACK (echo id) and reboot into the new image.
- *     Mismatch -> do NOTHING (no ACK): the host prompts the user to resend,
- *     and the watch stays in the flasher rather than rebooting into a brick.
+ *     Mismatch (or a malformed descriptor) -> NACK: the host knows for sure
+ *     the image is bad and offers a resend, and the watch stays in the
+ *     flasher rather than rebooting into a brick.
  *
- *  So, per frame, the watch does exactly one of three things: ACT-then-ACK
+ *  So, per frame, the watch does exactly one of four things: ACT-then-ACK
  *  (commit a block / verify the image), ACK-only (TEST frame, or a
- *  duplicate/repeat whose work is already done), or NOTHING (a reference
- *  mismatch, an out-of-sequence or wrong-kind frame, or a failed write).
- *  Silence is the signal that makes the host retransmit.
+ *  duplicate/repeat whose work is already done), NACK (an intact frame it
+ *  will never accept in its current state: a reference mismatch, a failed
+ *  verify, an out-of-sequence or wrong-kind frame, a frame for a stage it is
+ *  not in), or NOTHING (a corrupted frame, or a failed write). Silence is the
+ *  signal that makes the host retransmit; a NACK tells it to stop.
  * ===================================================================== */
 
 /* ===================================================================== *
@@ -214,40 +224,55 @@ typedef struct {
 
     /* Real-flash stage (point-of-no-return hand-off into the RAM flasher). The
      * whole-image descriptor is NOT held here; it travels in the EXIT frame and
-     * is parsed by the RAM flasher; the launcher only needs the first block. */
+     * is parsed by the RAM flasher. The first data block is not held here
+     * either: the hand-off copies it straight from the received frame into its
+     * stack snapshot (see firmware_flasher_handoff_t). */
     bool     session_is_patch;    /* the accepted ENTER was a VERIFIED patch ENTER:
                                      this authorizes the flasher to apply patch blocks */
     /* Patch header fields parsed + stored from the patch ENTER (valid while
-     * session_is_patch). Acted on only at first-block time (aux malloc + handoff). */
-    uint32_t patch_base;          /* app base of the images */
-    uint32_t patch_from_size;     /* REF extent */
-    uint32_t patch_to_size;       /* NEW extent */
+     * session_is_patch). Acted on only at first-block time (aux placement + handoff). */
+    uint32_t patch_base_addr;     /* where both images start (the app base) */
+    uint32_t patch_ref_size;      /* reference extent; 0 = empty reference (compressed full flash) */
+    uint32_t patch_new_size;      /* new image extent */
     uint32_t patch_shift_size;    /* detools shift_size = aux window size */
-    uint16_t first_block_id;      /* id of the first data block (ACKed by the flasher) */
-    uint32_t first_block_addr;    /* its target address */
-    uint8_t  first_block[FLASHER_ROW_SIZE] __attribute__((aligned(4)));  /* its 256-byte row */
 } firmware_flasher_state_t;
+
+/* Everything the hand-off into the RAM flasher needs, captured BEFORE the
+ * overlay load. The load copies the flasher over a RAM window that may still
+ * hold Movement heap -- possibly this face's own state -- so once it has run,
+ * nothing may be read from `state` or any other heap object. The snapshot lives
+ * on the stack, which the loader checks sits above the overlay, and stays valid
+ * because the hand-off never returns. */
+typedef struct {
+    uint32_t rx_baud, tx_baud;
+    bool     irda, tx_invert, rx_invert;
+    uint8_t  poll_hz, ack_hz, ack_settle_ticks, ack_count;
+    bool     is_patch;                  /* first block is a patch body chunk, else a uf2-like row */
+    uint16_t block_id;                  /* first block's frame id (ACKed by the flasher) */
+    uint32_t block_addr;                /* uf2-like only: its target address */
+    uint16_t block_len;                 /* bytes in `block` */
+    firmware_flasher_patch_t patch;     /* patch only; .aux/.aux_mask are set after the load */
+    uint8_t  block[FLASHER_ROW_SIZE] __attribute__((aligned(4)));
+} firmware_flasher_handoff_t;
 
 /* ---------------------------------------------------------------------- *
  *  The face code below hands off to the RAM-resident flasher core (its own
  *  translation unit; entry points declared in firmware_flasher_core.h).
- *  Only the arming hand-off itself is defined further down, and it is
+ *  Only the hand-off itself is defined further down, and it is
  *  hardware-only.
  * ---------------------------------------------------------------------- */
 #ifndef __EMSCRIPTEN__
 #ifdef FIRMWARE_FLASHER_ULTRAPATCH
-#include "firmware_flasher_ultrapatch.h"   /* state-size probe for the aux malloc */
-extern uint8_t end[];   /* linker heap base, reusable after the RAM flasher takes over */
+#include "firmware_flasher_ultrapatch.h"   /* decoder state-size probe */
 #endif
-static bool     firmware_flasher_overlay_load(void);
-static void     firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, bool irda,
-                                             bool tx_invert, bool rx_invert,
-                                             uint8_t poll_hz, uint8_t ack_hz, uint8_t ack_settle_ticks,
-                                             uint8_t ack_count,
-                                             const firmware_flasher_patch_t *patch,
-                                             uint16_t first_block_id, uint32_t first_block_addr,
-                                             bool first_block_is_patch, uint16_t first_block_len,
-                                             const uint8_t *first_block);
+extern uint8_t end[];   /* linker heap base: decoder RAM once the RAM flasher takes over */
+/* noinline: keeps the ~300-byte snapshot off handle_test_frame's stack frame,
+ * which runs on every received frame; the snapshot is only needed here. */
+static void __attribute__((noinline)) firmware_flasher_hand_off(const firmware_flasher_state_t *state,
+                                                                const watch_optical_frame_t *frame,
+                                                                bool is_patch);
+static bool firmware_flasher_overlay_load(void);
+static void firmware_flasher_arm_and_run(const firmware_flasher_handoff_t *h);
 #endif
 
 /* ===================================================================== *
@@ -350,15 +375,17 @@ bool firmware_flasher_face_loop(movement_event_t event, void *context) {
                         break;
                     }
                     case MOVEMENT_OPTICAL_TX_DONE:
-                        // ACK drained. An ENTER ACK advances to wait-for-block; a
-                        // test-frame ACK is just counted.
+                        // A response drained. An ENTER ACK advances to
+                        // wait-for-block; anything else (a test-frame ACK, a
+                        // NACK) leaves the stage as it was: just redraw it.
                         if (state->pending_ack_advances) {
                             state->pending_ack_advances = false;
                             state->phase = IR_FLASHER_PHASE_WAIT_BLOCK;
                             render_flash_wait(state);
-                        } else {
-                            state->test_frames_acked++;
+                        } else if (state->phase == IR_FLASHER_PHASE_TEST) {
                             render_test(state);
+                        } else {
+                            render_flash_wait(state);
                         }
                         break;
                     default:
@@ -526,12 +553,40 @@ static void abort_flash_mode(firmware_flasher_state_t *state) {
     state->phase = IR_FLASHER_PHASE_MENU;
 }
 
+/* NACK = the frame id XOR a fixed mask (IR_FLASHER_NACK): "this frame arrived
+ * intact, and I will never accept it in my current state", so the host stops
+ * resending it. Silence keeps meaning "resend". Like an ACK it ends the link's
+ * turn, and it never advances the stage. */
+static void send_nack(firmware_flasher_state_t *state, uint16_t id) {
+    movement_optical_send_ack(&state->link, IR_FLASHER_NACK(id));
+    state->pending_ack_advances = false;
+}
+
 /* Dispatch one received frame in the TEST / WAIT_BLOCK stages (from the
- * next_frame drain loop). Returns true when it responded (an ACK ends the turn)
- * or handed off to the RAM flasher; false for an unrelated frame (keep draining). */
+ * next_frame drain loop). Returns true when it responded -- an ACK, a NACK, or
+ * the hand-off (which never returns at all) -- since a response ends the turn;
+ * false only for an EXIT, which is ignored here (keep draining). */
 static bool handle_test_frame(firmware_flasher_state_t *state,
                               const watch_optical_frame_t *frame) {
     state->last_frame_id = frame->id;
+
+    // EXIT (VERIFY without ENTER) is answered only by the RAM flasher, where a
+    // NACK means "the image failed its check". Before the hand-off there is no
+    // image to check, and a NACK from here would tell the host exactly that,
+    // wrongly: e.g. a host still retrying EXIT after a verified flash rebooted
+    // the watch and the user reopened this face. Stay silent (keep draining).
+    if ((frame->flags & IR_FLASHER_FLAG_VERIFY) && !(frame->flags & IR_FLASHER_FLAG_ENTER))
+        return false;
+
+    // A TEST frame after ENTER means the host is (re)running its link test: it
+    // restarted after we ACKed its ENTER (the ACK was lost, or the host was
+    // interrupted before sending block 0). A TEST frame must never be handed off
+    // as data, so drop back to the TEST stage as if ENTER had never arrived; the
+    // TEST branch below then ACKs it like any other test frame.
+    if (state->phase == IR_FLASHER_PHASE_WAIT_BLOCK && (frame->flags & IR_FLASHER_FLAG_TEST)) {
+        state->phase            = IR_FLASHER_PHASE_TEST;
+        state->session_is_patch = false;
+    }
 
     if (state->phase == IR_FLASHER_PHASE_TEST) {
         // Per-frame beep (Light toggles). Async; safe on receipt since the buzzer
@@ -540,180 +595,108 @@ static bool handle_test_frame(firmware_flasher_state_t *state,
         if (frame->flags & IR_FLASHER_FLAG_TEST) {   // ACK + stay in TEST
             movement_optical_send_ack(&state->link, frame->id);
             state->pending_ack_advances = false;
+            state->test_frames_acked++;
             render_test(state);
             return true;
         }
         if (frame->flags & IR_FLASHER_FLAG_ENTER) {
-            handle_enter_frame(state, frame);   // ACKs (advances) iff valid
+            handle_enter_frame(state, frame);   // ACKs (advances) iff valid, else NACKs
             return true;
         }
-        return false;
+        // A data block: we are not flashing yet (e.g. a host resuming with
+        // --start-block while this watch never left its test stage).
+        send_nack(state, frame->id);
+        return true;
     }
 
     // WAIT_BLOCK: a repeated ENTER is re-ACKed; the first data block is NOT ACKed
-    // but copied aside and handed to the RAM flasher (which never returns).
-    bool first_is_patch = (frame->flags & firmware_flasher_patch_dialect()) != 0;
+    // but handed to the RAM flasher (which never returns).
     if (frame->flags & IR_FLASHER_FLAG_ENTER) {
         handle_enter_frame(state, frame);
         return true;
     }
-    if (state->session_is_patch && first_is_patch &&
-        frame->size > 0 && frame->size <= FLASHER_ROW_SIZE) {
-        // First patch body chunk (patch mode authorized by the verified ENTER).
-#ifndef __EMSCRIPTEN__
-        // POINT OF NO RETURN: load + verify the RAM overlay (flasher core +
-        // decoder) FIRST -- the state-size probe below already runs overlay
-        // code. Refusal here is the loader's ~impossible fail-safes only.
-        if (!firmware_flasher_overlay_load()) return true;   // swallowed, no ACK
-#ifdef FIRMWARE_FLASHER_ULTRAPATCH
-        // `aux` carries the UltraPatch decoder state (PatchApply), not a source
-        // window. Try malloc only when the heap break leaves enough room below
-        // the overlay; newlib's _sbrk does not enforce that ceiling. A watch
-        // with many face contexts may have no such room even though the static
-        // RAM below the overlay is large enough for PatchApply. In that case
-        // reuse the heap from the linker `end` symbol. arm_and_run closes
-        // Movement's optical session and disables interrupts; flasher_run
-        // copies first_block into the overlay before the decoder touches aux.
-        // No Movement code or heap allocation runs after that until reset.
-        // If even the static window is too small, arm with NULL and park for
-        // a block-0 full-flash takeover as before.
-        uint32_t need = firmware_flasher_ultrapatch_state_size();
-        uint8_t *aux = NULL;
-        uintptr_t brk = (uintptr_t)_sbrk(0);  // current heap top
-        uint32_t available = brk >= 0x20000000u && brk < FLASHER_OVERLAY_BASE
-                           ? (uint32_t)(FLASHER_OVERLAY_BASE - brk) : 0u;
-        if (brk >= 0x20000000u && brk < FLASHER_OVERLAY_BASE &&
-            available >= need + 512u /*allocator margin*/) {
-            aux = malloc(need);   // guaranteed to fit
-        }
-        if (aux == NULL) {
-            uintptr_t heap_base = ((uintptr_t)end + 7u) & ~(uintptr_t)7u;
-            if (heap_base >= 0x20000000u && heap_base < FLASHER_OVERLAY_BASE &&
-                (uint32_t)(FLASHER_OVERLAY_BASE - heap_base) >= need + 512u) {
-                aux = (uint8_t *)heap_base;
-            }
-        }
-        firmware_flasher_patch_t pd = {
-            .aux = aux, .aux_mask = 0u,
-#else
-        // Aux window = smallest pow2 >= shift_size (indexed by mask in the RAM
-        // core); NULL => in-flash shift fallback. CRITICAL: don't just malloc —
-        // newlib's _sbrk has no limit check, so an oversized request corrupts
-        // the heap and still returns non-NULL. Probe the break and require it
-        // to fit below the overlay base (the heap ceiling; the loaded flasher
-        // sits right above it).
-        uint32_t pow2 = 1u;
-        while (pow2 < state->patch_shift_size) pow2 <<= 1;
-        uint8_t *aux = NULL;
-        uintptr_t brk = (uintptr_t)_sbrk(0);  // current heap top
-        if (brk >= 0x20000000u && brk < FLASHER_OVERLAY_BASE &&
-            (uint32_t)(FLASHER_OVERLAY_BASE - brk) >= pow2 + 512u /*allocator margin*/) {
-            aux = malloc(pow2);   // guaranteed to fit
-        }
-        firmware_flasher_patch_t pd = {
-            .aux = aux, .aux_mask = aux ? (pow2 - 1u) : 0u,
-#endif
-            .base = state->patch_base, .from_size = state->patch_from_size,
-            .to_size = state->patch_to_size, .shift_size = state->patch_shift_size,
-        };
-        state->first_block_id = frame->id;
-        memcpy(state->first_block, frame->payload, frame->size);
-        // POINT OF NO RETURN: never returns; the RAM flasher closes the link.
-        firmware_flasher_arm_and_run(
-            baud_options[state->rx_baud_index],
-            baud_options[state->tx_baud_index],
-            state->encoding == IR_FLASHER_ENC_IRDA,
-            state->tx_invert, state->rx_invert,
-            poll_rate_options[state->poll_rate_index],
-            poll_rate_options[state->ack_rate_index],
-            ack_settle_options[state->ack_settle_index],
-            state->ack_count,
-            &pd, frame->id, 0u, true, frame->size, state->first_block);
-#endif
-        return true;   // unreachable on hardware; patch never reaches here on sim
-    }
-    if (!first_is_patch && frame->size == IR_FLASHER_BLOCK_PAYLOAD) {
-        // First uf2-like block (also the patch -> uf2 block-0 fallback).
-        state->first_block_id   = frame->id;
-        state->first_block_addr = (uint32_t)frame->payload[0]
-                                | ((uint32_t)frame->payload[1] << 8)
-                                | ((uint32_t)frame->payload[2] << 16)
-                                | ((uint32_t)frame->payload[3] << 24);
-        memcpy(state->first_block, frame->payload + 4, FLASHER_ROW_SIZE);
-#ifndef __EMSCRIPTEN__
-        // POINT OF NO RETURN: load + verify the RAM overlay (refusal is the
-        // loader's ~impossible fail-safes only), then arm. Never returns.
-        if (!firmware_flasher_overlay_load()) return true;
-        // patch = NULL => uf2 session.
-        firmware_flasher_arm_and_run(
-            baud_options[state->rx_baud_index],
-            baud_options[state->tx_baud_index],
-            state->encoding == IR_FLASHER_ENC_IRDA,
-            state->tx_invert, state->rx_invert,
-            poll_rate_options[state->poll_rate_index],
-            poll_rate_options[state->ack_rate_index],
-            ack_settle_options[state->ack_settle_index],
-            state->ack_count,
-            NULL, state->first_block_id, state->first_block_addr,
-            false, FLASHER_ROW_SIZE, state->first_block);
-#endif
-        abort_flash_mode(state);   // sim only (no flashing); return to the menu
-        render_menu(state);
+    bool first_is_patch = (frame->flags & firmware_flasher_patch_dialect()) != 0;
+    // First patch body chunk: patch mode is authorized by the verified ENTER only.
+    bool patch_block = state->session_is_patch && first_is_patch &&
+                       frame->size > 0 && frame->size <= FLASHER_ROW_SIZE;
+    // First uf2-like block (also the patch -> uf2 block-0 fallback).
+    bool full_block  = !first_is_patch && frame->size == IR_FLASHER_BLOCK_PAYLOAD;
+    if (!patch_block && !full_block) {
+        // Not a valid first block for this session (e.g. a patch frame without
+        // a verified patch ENTER, or a malformed block).
+        send_nack(state, frame->id);
         return true;
     }
-    return false;
+#ifndef __EMSCRIPTEN__
+    // POINT OF NO RETURN. Returns only if the overlay loader refused (its
+    // ~impossible fail-safes): the block is swallowed, no ACK.
+    firmware_flasher_hand_off(state, frame, patch_block);
+#else
+    abort_flash_mode(state);   // simulator: no flashing; return to the menu
+    render_menu(state);
+#endif
+    return true;
 }
 
-/* Parse + validate a patch ENTER's 20-byte header {base, from_size, ref_crc32,
- * to_size, shift_size}, LE (IR_FLASHER_PATCH_ENTER_SIZE). Returns true (and
- * stores the apply params in `state`) iff the watch's CURRENT flash over
- * [base, base+from_size) CRCs to ref_crc32, i.e. the patch applies to the right
- * base image. The read-back CRC needs the DSU, so this is hardware-only; on the
- * simulator (flashing unsupported) it always refuses. Nothing is acted on here
- * beyond reading flash; the aux allocation / apply happen at first-block time. */
+/* Parse + validate a patch ENTER's 20-byte header {base_addr, ref_size,
+ * ref_crc, new_size, shift_size}, LE (IR_FLASHER_PATCH_ENTER_SIZE). Returns
+ * true (and stores the apply params in `state`) iff the watch's CURRENT flash
+ * over [base_addr, base_addr + ref_size) CRCs to ref_crc, i.e. the patch
+ * applies to the right base image. The read-back CRC needs the DSU, so this is
+ * hardware-only; on the simulator (flashing unsupported) it always refuses.
+ * Nothing is acted on here beyond reading flash; the decoder RAM placement /
+ * apply happen at first-block time. */
 static bool enter_patch_setup(firmware_flasher_state_t *state,
                               const watch_optical_frame_t *frame) {
 #ifndef __EMSCRIPTEN__
     if (frame->size != IR_FLASHER_PATCH_ENTER_SIZE) return false;
     const uint8_t *p = frame->payload;
-    uint32_t base  = (uint32_t)p[0]  | ((uint32_t)p[1]  << 8) | ((uint32_t)p[2]  << 16) | ((uint32_t)p[3]  << 24);
-    uint32_t from  = (uint32_t)p[4]  | ((uint32_t)p[5]  << 8) | ((uint32_t)p[6]  << 16) | ((uint32_t)p[7]  << 24);
-    uint32_t ref   = (uint32_t)p[8]  | ((uint32_t)p[9]  << 8) | ((uint32_t)p[10] << 16) | ((uint32_t)p[11] << 24);
-    uint32_t to    = (uint32_t)p[12] | ((uint32_t)p[13] << 8) | ((uint32_t)p[14] << 16) | ((uint32_t)p[15] << 24);
-    uint32_t shift = (uint32_t)p[16] | ((uint32_t)p[17] << 8) | ((uint32_t)p[18] << 16) | ((uint32_t)p[19] << 24);
+    uint32_t base_addr  = (uint32_t)p[0]  | ((uint32_t)p[1]  << 8) | ((uint32_t)p[2]  << 16) | ((uint32_t)p[3]  << 24);
+    uint32_t ref_size   = (uint32_t)p[4]  | ((uint32_t)p[5]  << 8) | ((uint32_t)p[6]  << 16) | ((uint32_t)p[7]  << 24);
+    uint32_t ref_crc    = (uint32_t)p[8]  | ((uint32_t)p[9]  << 8) | ((uint32_t)p[10] << 16) | ((uint32_t)p[11] << 24);
+    uint32_t new_size   = (uint32_t)p[12] | ((uint32_t)p[13] << 8) | ((uint32_t)p[14] << 16) | ((uint32_t)p[15] << 24);
+    uint32_t shift_size = (uint32_t)p[16] | ((uint32_t)p[17] << 8) | ((uint32_t)p[18] << 16) | ((uint32_t)p[19] << 24);
 #ifdef FIRMWARE_FLASHER_ULTRAPATCH
     /* (The dialect gate happened upstream: only an ENTER carrying OUR patch
-     * bit reaches here.) The decoder's image window is compile-time, so base
-     * must equal it exactly; shift_size is not a concept in this format and
-     * ships as 0. from/to stay row-aligned (the host pads both images), which
-     * also satisfies the DSU. */
-    if (base != FLASHER_ULTRAPATCH_IMAGE_BASE) return false;
-    if (from  == 0 || (from  % FLASHER_ROW_SIZE) != 0) return false;   /* row-aligned (host pads) */
-    if (to    == 0 || (to    % FLASHER_ROW_SIZE) != 0) return false;
-    if (shift != 0) return false;
-    if (!firmware_flasher_range_writable(base, from)) return false;    /* REF region in app flash */
-    if (!firmware_flasher_range_writable(base, to))   return false;    /* NEW region in app flash */
+     * bit reaches here.) The decoder's image window is compile-time, so
+     * base_addr must equal it exactly; shift_size is not a concept in this
+     * format and ships as 0. Sizes stay row-aligned (the host pads both
+     * images), which also satisfies the DSU.
+     *
+     * ref_size may be 0: an EMPTY reference. The host then sends a full image
+     * compressed as a patch against nothing -- a compressed full flash. There
+     * is deliberately no special mode for it: an empty range has nothing to
+     * bounds-check (range_writable refuses length 0 by design, since it also
+     * guards writes, so it is skipped), and its CRC is the CRC-32 of nothing,
+     * 0, so the ordinary reference comparison below passes for ref_crc == 0. */
+    if (base_addr != FLASHER_ULTRAPATCH_IMAGE_BASE) return false;
+    if ((ref_size % FLASHER_ROW_SIZE) != 0) return false;                   /* row-aligned; 0 = empty */
+    if (new_size == 0 || (new_size % FLASHER_ROW_SIZE) != 0) return false;
+    if (shift_size != 0) return false;
+    if (ref_size != 0 && !firmware_flasher_range_writable(base_addr, ref_size)) return false;  /* REF in app flash */
+    if (!firmware_flasher_range_writable(base_addr, new_size)) return false;                   /* NEW in app flash */
 #else
-    if ((base & 3u) != 0) return false;                                /* DSU needs 4-aligned addr */
-    if (from  == 0 || (from  % FLASHER_ROW_SIZE) != 0) return false;   /* row-aligned (host pads) */
-    if (to    == 0 || (to    % FLASHER_ROW_SIZE) != 0) return false;
-    if (shift == 0 || (shift % FLASHER_ROW_SIZE) != 0) return false;
-    if (!firmware_flasher_range_writable(base, from)) return false;    /* REF region in app flash */
-    if (!firmware_flasher_range_writable(base, to))   return false;    /* NEW region in app flash */
-    /* The shifted REF must also fit: base+shift+from <= app-flash end. This both
-     * bounds the aux window and guarantees the in-flash shift fallback (which
-     * relocates REF up to the region end) has room, i.e. shift <= max shift. */
-    if (!firmware_flasher_range_writable(base + shift, from)) return false;
+    if ((base_addr & 3u) != 0) return false;                                       /* DSU needs 4-aligned addr */
+    if (ref_size   == 0 || (ref_size   % FLASHER_ROW_SIZE) != 0) return false;     /* row-aligned (host pads) */
+    if (new_size   == 0 || (new_size   % FLASHER_ROW_SIZE) != 0) return false;
+    if (shift_size == 0 || (shift_size % FLASHER_ROW_SIZE) != 0) return false;
+    if (!firmware_flasher_range_writable(base_addr, ref_size)) return false;      /* REF in app flash */
+    if (!firmware_flasher_range_writable(base_addr, new_size)) return false;      /* NEW in app flash */
+    /* The shifted REF must also fit: base_addr + shift_size + ref_size <=
+     * app-flash end. This both bounds the aux window and guarantees the
+     * in-flash shift fallback (which relocates REF up to the region end) has
+     * room, i.e. shift_size <= max shift. */
+    if (!firmware_flasher_range_writable(base_addr + shift_size, ref_size)) return false;
 #endif
     /* Pre-flight reference CRC via the flash-resident serial_frame DSU code:
      * the RAM core (and its own CRC routine) has not been loaded yet -- the
      * overlay is only copied in at first-block time. Same engine, same
-     * convention. */
-    if (serial_frame_crc32((const uint8_t *)base, from) != ref) return false;
-    state->patch_base       = base;
-    state->patch_from_size  = from;
-    state->patch_to_size    = to;
-    state->patch_shift_size = shift;
+     * convention; a zero-length range returns 0 without starting the DSU. */
+    if (serial_frame_crc32((const uint8_t *)base_addr, ref_size) != ref_crc) return false;
+    state->patch_base_addr  = base_addr;
+    state->patch_ref_size   = ref_size;
+    state->patch_new_size   = new_size;
+    state->patch_shift_size = shift_size;
     return true;
 #else
     (void) state; (void) frame;
@@ -722,16 +705,24 @@ static bool enter_patch_setup(firmware_flasher_state_t *state,
 }
 
 /* ACK an ENTER and advance to the wait-for-block stage. A patch ENTER is ACKed
- * only if its header verifies (enter_patch_setup); a mismatch is dropped, no ACK.
- * A verified patch ENTER — not any block flag — is what enables patch mode. */
+ * only if its header verifies (enter_patch_setup); otherwise it is NACKed (the
+ * reference does not match, or the ENTER is malformed) and the stage is left
+ * unchanged. A verified patch ENTER -- not any block flag -- is what enables
+ * patch mode. */
 static void handle_enter_frame(firmware_flasher_state_t *state,
                                const watch_optical_frame_t *frame) {
     bool is_patch = (frame->flags & firmware_flasher_patch_dialect()) != 0;
     /* An ENTER carrying VERIFY or a payload is a patch ENTER in SOME dialect
-     * (a full-flash ENTER is empty and bare); if it is not OURS, silence --
+     * (a full-flash ENTER is empty and bare); if it is not OURS, NACK it --
      * never ACK it as a full-flash ENTER. */
-    if (!is_patch && ((frame->flags & IR_FLASHER_FLAG_VERIFY) || frame->size != 0)) return;
-    if (is_patch && !enter_patch_setup(state, frame)) return;
+    if (!is_patch && ((frame->flags & IR_FLASHER_FLAG_VERIFY) || frame->size != 0)) {
+        send_nack(state, frame->id);
+        return;
+    }
+    if (is_patch && !enter_patch_setup(state, frame)) {
+        send_nack(state, frame->id);
+        return;
+    }
     state->session_is_patch = is_patch;
     movement_optical_send_ack(&state->link, frame->id);
     state->pending_ack_advances = true;
@@ -840,6 +831,19 @@ static void render_flash_wait(const firmware_flasher_state_t *state) {
     // ENTER received; waiting for the first data block.
     watch_display_text_with_fallback(WATCH_POSITION_TOP, "WA1T", "WA1T");
 }
+
+#ifndef __EMSCRIPTEN__
+// Past the point of no return: the RAM flasher can't draw, so this is drawn
+// once, at the hand-off, and the LCD holds it for the whole session. Static (no
+// heartbeat) and unlike the earlier screens, so anyone holding the watch after
+// a failed session can tell "committed: recover with a full flash over IR"
+// from "WA1T": still in Movement, where Alarm aborts.
+static void render_committed(void) {
+    watch_clear_display();   // also clears every indicator
+    watch_display_text(WATCH_POSITION_TOP, "IR");
+    watch_display_text(WATCH_POSITION_BOTTOM, "uPdAtE");
+}
+#endif
 /* ===================================================================== *
  *  The RAM-resident flasher core, the frame parser, and the patch       *
  *  decoder backends live in their own fully-RAM translation units:      *
@@ -867,11 +871,7 @@ static void render_flash_wait(const firmware_flasher_state_t *state) {
  * path from here on runs over the IR link inside the flasher (park, block-0
  * full-flash takeover, EXIT verify) -- never by returning to Movement. So
  * the copy proceeds even though the window overlaps what is normally heap
- * headroom: any heap contents above the overlay base are dead weight now,
- * and if state the hand-off still reads from the heap got smashed (possible
- * only if Movement's heap had grown past the overlay base, ~12 KiB), the
- * resulting garbage fails frame CRCs or the decode and the session parks --
- * still recoverable over IR.
+ * headroom (see the heap note below).
  *
  * Only two ~impossible conditions refuse (swallow the block, no ACK),
  * because PROCEEDING would be strictly worse than the host retrying:
@@ -879,6 +879,11 @@ static void render_flash_wait(const firmware_flasher_state_t *state) {
  *     overwrite the very frames executing it and crash mid-copy;
  *   - the post-copy byte-for-byte verify failing: arming a corrupted
  *     flash-writing engine could endanger the bootloader.
+ * The heap break is deliberately NOT checked: whatever heap lies above the
+ * overlay base is dead weight now. That is only safe because the caller,
+ * firmware_flasher_hand_off(), has already copied everything it needs
+ * (link settings, first block, patch geometry) onto the stack; nothing may be
+ * read from the heap after this returns.
  *
  * The copy also plants a canary word just past the overlay; the core checks
  * it after the decoder backend runs, so a session stack that dug into the
@@ -894,41 +899,124 @@ static bool firmware_flasher_overlay_load(void) {
     return true;
 }
 
+/* ---- Hand-off (flash-resident; THE point of no return) ----------------- *
+ *
+ * Snapshot -> load the overlay -> place the patch decoder's RAM -> arm. The
+ * snapshot comes first and is the only thing used afterwards: the overlay copy
+ * may land on heap holding `state` itself (see the loader). `frame->payload`
+ * points into watch_optical's static held-frame slot (.bss, below the overlay),
+ * but it is copied here too, so nothing outside the snapshot is read once the
+ * copy has run. Returns only if the loader refused; otherwise never. */
+static void firmware_flasher_hand_off(const firmware_flasher_state_t *state,
+                                      const watch_optical_frame_t *frame,
+                                      bool is_patch) {
+    firmware_flasher_handoff_t h;
+    h.rx_baud          = baud_options[state->rx_baud_index];
+    h.tx_baud          = baud_options[state->tx_baud_index];
+    h.irda             = state->encoding == IR_FLASHER_ENC_IRDA;
+    h.tx_invert        = state->tx_invert;
+    h.rx_invert        = state->rx_invert;
+    h.poll_hz          = poll_rate_options[state->poll_rate_index];
+    h.ack_hz           = poll_rate_options[state->ack_rate_index];
+    h.ack_settle_ticks = ack_settle_options[state->ack_settle_index];
+    h.ack_count        = state->ack_count;
+    h.is_patch         = is_patch;
+    h.block_id         = frame->id;
+    if (is_patch) {
+        h.block_addr = 0u;
+        h.block_len  = frame->size;
+        memcpy(h.block, frame->payload, frame->size);
+        h.patch = (firmware_flasher_patch_t){
+            .aux = NULL, .aux_mask = 0u,
+            .base_addr = state->patch_base_addr, .ref_size = state->patch_ref_size,
+            .new_size = state->patch_new_size, .shift_size = state->patch_shift_size,
+        };
+    } else {
+        h.block_addr = (uint32_t)frame->payload[0]
+                     | ((uint32_t)frame->payload[1] << 8)
+                     | ((uint32_t)frame->payload[2] << 16)
+                     | ((uint32_t)frame->payload[3] << 24);
+        h.block_len  = FLASHER_ROW_SIZE;
+        memcpy(h.block, frame->payload + 4, FLASHER_ROW_SIZE);
+        memset(&h.patch, 0, sizeof(h.patch));   /* unused: uf2 session */
+    }
+    /* `state` and `frame` must not be touched below this line. */
+
+    /* POINT OF NO RETURN: load + verify the RAM overlay (flasher core +
+     * decoder) FIRST -- the UltraPatch state-size probe below already runs
+     * overlay code. */
+    if (!firmware_flasher_overlay_load()) return;   /* swallowed, no ACK */
+
+    /* Committed: from here the watch can only finish or park in the RAM
+     * flasher, so the LCD says so (display code touches only its own globals
+     * and the SLCD, never the heap). */
+    render_committed();
+
+    if (is_patch) {
+        /* The decoder's RAM (`aux`) always goes at the start of Movement's heap
+         * (the linker's `end`), never via malloc: Movement never runs again, so
+         * its whole heap -- face contexts included -- is dead, and the heap's
+         * start is the lowest and therefore roomiest place below the overlay
+         * (anything malloc could have provided fits here too). Not lower still:
+         * Movement's globals below `end` hold the USB endpoint table, which the
+         * USB hardware keeps reading on its own while the watch is plugged in.
+         * The first block is safe in the snapshot on the stack. Whether the
+         * buffer fits is decided per patch, by plain address arithmetic. */
+        uintptr_t heap_base = ((uintptr_t)end + 7u) & ~(uintptr_t)7u;
+        uint32_t  room      = (heap_base >= 0x20000000u && heap_base < FLASHER_OVERLAY_BASE)
+                            ? (uint32_t)(FLASHER_OVERLAY_BASE - heap_base) : 0u;
+#ifdef FIRMWARE_FLASHER_ULTRAPATCH
+        /* UltraPatch: `aux` is the fixed-size decoder state (PatchApply). If it
+         * does not fit (Movement's globals would have to grow past ~13 KiB),
+         * arm with NULL: the session parks for a block-0 full-flash takeover. */
+        uint32_t need = firmware_flasher_ultrapatch_state_size();
+        h.patch.aux      = (room >= need) ? (uint8_t *)heap_base : NULL;
+        h.patch.aux_mask = 0u;
+#else
+        /* detools: `aux` is the sliding source window, the smallest pow2 >=
+         * this patch's shift_size (the RAM core indexes it by mask). shift_size
+         * has no fixed maximum (the ENTER check only bounds it below the flash
+         * size), so a window that does not fit gets NULL = the in-flash shift
+         * fallback. */
+        uint32_t pow2 = 1u;
+        while (pow2 < h.patch.shift_size) pow2 <<= 1;
+        h.patch.aux      = (room >= pow2) ? (uint8_t *)heap_base : NULL;
+        h.patch.aux_mask = h.patch.aux ? (pow2 - 1u) : 0u;
+#endif
+    }
+
+    firmware_flasher_arm_and_run(&h);   /* never returns */
+}
+
 /* ---- Arming hand-off (flash-resident; runs once before any erase) ---- *
  *
  * THE POINT OF NO RETURN. Arms the system and runs the RAM-resident flasher;
  * NEVER RETURNS (it reboots via NVIC_SystemReset on a verified image, or stays
  * in its loop awaiting a retry; control reaches Movement again only across a
  * reset). The launcher must already have, over the proven watch_optical
- * transport, received + ACKed the (empty) ENTER frame and received the first
- * data block (id/addr/data) WITHOUT ACKing it; `first_block` points at
- * FLASHER_ROW_SIZE bytes in RAM. This call configures the raw SERCOM link
- * (rx_baud/tx_baud/irda, tx_invert/rx_invert), masks interrupts, parks the RTC
- * + NVM cache, selects STANDBY, and hands control to flasher_run.
+ * transport, received + ACKed the ENTER frame and received the first data
+ * block WITHOUT ACKing it; `h` is the hand-off snapshot holding that block and
+ * the link settings, on the (never-unwound) stack of firmware_flasher_hand_off.
+ * This call configures the raw SERCOM link (rx/tx baud, irda, tx/rx invert),
+ * masks interrupts, parks the RTC + NVM cache, selects STANDBY, and hands
+ * control to flasher_run.
  *
- * `patch` is NULL for a uf2-like session, else the assembled patch descriptor:
+ * The patch descriptor is passed on only for a patch session (h->is_patch):
  * the verified ENTER's authority for patch mode, NOT any block flag. poll_hz /
  * ack_hz / ack_settle_ticks are the launcher's TEST-stage link timings, from
  * which the per-ACK settle is derived (see below). */
-static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, bool irda,
-                                  bool tx_invert, bool rx_invert,
-                                  uint8_t poll_hz, uint8_t ack_hz, uint8_t ack_settle_ticks,
-                                  uint8_t ack_count,
-                                  const firmware_flasher_patch_t *patch,
-                                  uint16_t first_block_id, uint32_t first_block_addr,
-                                  bool first_block_is_patch, uint16_t first_block_len,
-                                  const uint8_t *first_block) {
-    flasher_ack_count = (ack_count < IR_FLASHER_ACK_COUNT_MIN) ? IR_FLASHER_ACK_COUNT_MIN
-                : (ack_count > IR_FLASHER_ACK_COUNT_MAX) ? IR_FLASHER_ACK_COUNT_MAX
-                : ack_count;
+static void firmware_flasher_arm_and_run(const firmware_flasher_handoff_t *h) {
+    flasher_ack_count = (h->ack_count < IR_FLASHER_ACK_COUNT_MIN) ? IR_FLASHER_ACK_COUNT_MIN
+                : (h->ack_count > IR_FLASHER_ACK_COUNT_MAX) ? IR_FLASHER_ACK_COUNT_MAX
+                : h->ack_count;
     /* Per-ACK settle, in RTC ticks = MIDDLE of the TEST stage's effective-settle
      * window expressed directly in ticks. The window in seconds is
      * [settle/ack_hz, settle/ack_hz + 1/poll_hz]; its midpoint x 128 Hz is:
      *     ack_settle_ticks*128/ack_hz  +  (128/2)/poll_hz
      * i.e. the configured settle plus half the poll-latency window that the TEST
      * stage incurred but the flasher (no poll latency) does not. */
-    flasher_ack_settle_ticks = ((uint32_t)ack_settle_ticks * FLASHER_RTC_HZ) / ack_hz
-                       + (FLASHER_RTC_HZ / 2u) / poll_hz;
+    flasher_ack_settle_ticks = ((uint32_t)h->ack_settle_ticks * FLASHER_RTC_HZ) / h->ack_hz
+                       + (FLASHER_RTC_HZ / 2u) / h->poll_hz;
 
     /* Mask all interrupt dispatch first: from here, no ISR (all in flash, about
      * to be erased) may ever run again. NVIC pending bits still wake WFI. */
@@ -951,10 +1039,10 @@ static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, boo
     /* tx_invert/rx_invert -> CTRLA.TXINV/RXINV: data-bit invert (ISO 7816), not
      * optical polarity, no effect in IrDA. Different SERCOMs, so RX/TX baud differ. */
     uart2_sercom_config_t txc = {
-        .sercom = WATCH_OPTICAL_TX_SERCOM, .baud = tx_baud, .irda = irda, .invert = tx_invert, .run_in_standby = true,
+        .sercom = WATCH_OPTICAL_TX_SERCOM, .baud = h->tx_baud, .irda = h->irda, .invert = h->tx_invert, .run_in_standby = true,
     };
     uart2_sercom_config_t rxc = {
-        .sercom = WATCH_OPTICAL_RX_SERCOM, .baud = rx_baud, .irda = irda, .invert = rx_invert, .run_in_standby = true,
+        .sercom = WATCH_OPTICAL_RX_SERCOM, .baud = h->rx_baud, .irda = h->irda, .invert = h->rx_invert, .run_in_standby = true,
     };
     uart2_open(WATCH_OPTICAL_TX_TXPO, &txc, WATCH_OPTICAL_RX_RXPO, &rxc);
 
@@ -974,8 +1062,8 @@ static void firmware_flasher_arm_and_run(uint32_t rx_baud, uint32_t tx_baud, boo
     NVIC_ClearPendingIRQ(WATCH_OPTICAL_RX_SERCOM_IRQ);
 
     /* Into RAM. Never returns. */
-    flasher_run(patch, first_block_id, first_block_addr,
-                first_block_is_patch, first_block_len, first_block);
+    flasher_run(h->is_patch ? &h->patch : NULL, h->block_id, h->block_addr,
+                h->is_patch, h->block_len, h->block);
     for (;;) { }   /* unreachable, but make the no-return contract explicit */
 }
 

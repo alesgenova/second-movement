@@ -91,7 +91,8 @@ extern uint32_t flasher_hosted_bootloader_end, flasher_hosted_app_flash_end;
  */
 #define IR_FLASHER_FLAG_TEST        (1u << 2)  /* link-test frame: watch ACKs, does NOT commit */
 #define IR_FLASHER_FLAG_ENTER       (1u << 3)  /* enter the real flasher; payload empty (full flash), or
-                                                  with FLAG_PATCH+FLAG_VERIFY = the reference descriptor */
+                                                  with FLAG_PATCH+FLAG_VERIFY = the reference descriptor
+                                                  (ref_size 0 = empty reference: a compressed full flash) */
 #define IR_FLASHER_FLAG_VERIFY      (1u << 4)  /* EXIT: final whole-image CRC check; payload = descriptor */
 /* Delta (patch) flash rather than a verbatim uf2-like one. On ENTER (with
  * FLAG_VERIFY): "patch session", ACK only if the reference descriptor matches
@@ -119,8 +120,33 @@ extern uint32_t flasher_hosted_bootloader_end, flasher_hosted_app_flash_end;
 #define IR_FLASHER_ACK_COUNT_MIN    1u
 #define IR_FLASHER_ACK_COUNT_MAX    4u
 
+/* The NACK is the frame id XOR IR_FLASHER_NACK_MASK, sent exactly like an ACK
+ * (2 bytes LE, repeated ack_count times). It means "this frame arrived intact
+ * (CRC OK), and I will never accept it in my current state", so resending it
+ * is pointless. Silence keeps its meaning: "resend" (a corrupted frame, or a
+ * row write that failed and may succeed next time). XOR with a constant is
+ * one-to-one (it undoes itself), and the host mirrors the mask by value
+ * (bin/firmware_flasher.py NACK_MASK): keep them in lockstep.
+ *
+ * Why this mask (all verified exhaustively over the 16-bit id space):
+ *   - non-zero: a NACK always differs from its own ACK;
+ *   - its two bytes DIFFER (0x55 / 0x5A): back-to-back NACK copies can never
+ *     contain the plain ACK bytes across a copy boundary (or vice versa), so
+ *     no host, old or new, can read a repeated NACK as an ACK. (The plain
+ *     complement 0xFFFF fails this for every id whose bytes XOR to 0xFF,
+ *     e.g. 255, 510, 765.)
+ *   - balanced bytes that are not reachable from the corruptions seen on this
+ *     link: a weak ACK loses light, i.e. gains 1-bits (a 0x00 byte recorded
+ *     as 7f / a0 / ff), so a NACK byte must not be such a byte plus more
+ *     1-bits. Block 0's ACK is 00 00; with the complement its NACK would be
+ *     exactly ff ff, the most likely corruption of all.
+ * A host that predates NACKs never matches one; it just keeps retrying. */
+#define IR_FLASHER_NACK_MASK        0x5A55u
+#define IR_FLASHER_NACK(id)         ((uint16_t)((id) ^ IR_FLASHER_NACK_MASK))
+
 /* The EXIT (VERIFY) frame's payload: the image descriptor, 12 bytes LE
- * (base_addr, total_length, image_crc32). */
+ *   base_addr(4) new_size(4) new_crc(4)
+ * = where the new image starts, its length, and its CRC-32. */
 #define IR_FLASHER_DESCRIPTOR_SIZE  12u
 
 /* A data block's payload: target address (4 LE) followed by one full
@@ -128,8 +154,13 @@ extern uint32_t flasher_hosted_bootloader_end, flasher_hosted_app_flash_end;
 #define IR_FLASHER_BLOCK_PAYLOAD    (4u + FLASHER_ROW_SIZE)   /* 260 */
 
 /* Patch (delta) ENTER payload: 20 bytes LE
- *   base(4) from_size(4) ref_crc32(4) to_size(4) shift_size(4)
- * (see enter_patch_setup in the face for the full semantics). */
+ *   base_addr(4) ref_size(4) ref_crc(4) new_size(4) shift_size(4)
+ * base_addr: where both images start; ref_size/ref_crc: the reference (the
+ * firmware the patch applies to) that must be in flash now; new_size: the
+ * image the patch produces; shift_size: detools only (0 for UltraPatch).
+ * UltraPatch also accepts ref_size 0 = an empty reference, i.e. a full image
+ * compressed as a patch against nothing; its ref_crc is then 0, the CRC-32 of
+ * nothing. See enter_patch_setup in the face for the full semantics. */
 #define IR_FLASHER_PATCH_ENTER_SIZE  20u
 
 /*
@@ -140,14 +171,15 @@ extern uint32_t flasher_hosted_bootloader_end, flasher_hosted_app_flash_end;
  * UltraPatch build it is the decoder's caller-owned state buffer (NULL when
  * the launcher could not allocate it below the overlay: the backend then
  * refuses to run and the parked session is recovered with a block-0 full
- * flash). from/to/shift_size come from the verified ENTER.
+ * flash). base_addr/ref_size/new_size/shift_size come from the verified ENTER
+ * (same names as its wire fields).
  */
 typedef struct {
     uint8_t *aux;            /* detools: REF window; ultrapatch: decoder state */
     uint32_t aux_mask;       /* window size - 1 (a power-of-two mask); 0 for ultrapatch */
-    uint32_t base;           /* app base of the images */
-    uint32_t from_size;      /* REF extent (source bound) */
-    uint32_t to_size;        /* NEW extent (bytes to reconstruct) */
+    uint32_t base_addr;      /* where both images start (the app base) */
+    uint32_t ref_size;       /* reference extent (source bound); 0 = empty reference */
+    uint32_t new_size;       /* new image extent (bytes to reconstruct) */
     uint32_t shift_size;     /* detools shift_size = max source lookback */
 } firmware_flasher_patch_t;
 
@@ -175,18 +207,22 @@ static inline bool firmware_flasher_range_writable(uint32_t addr, uint32_t len) 
  * The core + backend TUs are NOT boot-resident: their sections (renamed to
  * .flovl.* by the build) live in flash and are copied to a fixed VMA window
  * near the top of RAM by the face's loader at first-block time (see
- * flasher-overlay.ld for the full story). FLASHER_OVERLAY_BASE mirrors the
- * linker fragment's placement and is the heap ceiling for a flash session:
- * the loader refuses to copy if the heap break has crossed it, and the
- * launcher's allocations (aux window / decoder state) must fit below it.
- * A canary word just past the overlay guards against the session's stack
- * digging into the loaded code. */
+ * flasher-overlay.ld for the full story). FLASHER_OVERLAY_BASE is that
+ * placement, read from the linker's own symbol so flasher-overlay.ld is the
+ * ONLY place the address is set (a C copy could silently go stale). It is the
+ * heap ceiling for a flash session: the launcher's decoder RAM (aux window /
+ * decoder state) must fit below it. The loader itself checks only the stack,
+ * NOT the heap break: the copy deliberately proceeds over any heap above the
+ * base (Movement is forfeit by then), which is why the face's hand-off
+ * snapshots everything it needs onto the stack before loading. A canary word
+ * just past the overlay guards against the session's stack digging into the
+ * loaded code. */
 #ifdef __arm__
-#define FLASHER_OVERLAY_BASE    0x20005000u   /* keep in lockstep with flasher-overlay.ld */
-#define FLASHER_OVERLAY_CANARY  0x5AFE57ACu
-
 extern uint8_t __flovl_vma_start[], __flovl_vma_end[];
 extern const uint8_t __flovl_lma_start[];
+
+#define FLASHER_OVERLAY_BASE    ((uintptr_t)__flovl_vma_start)
+#define FLASHER_OVERLAY_CANARY  0x5AFE57ACu
 
 static inline volatile uint32_t *flasher_overlay_canary_addr(void) {
     return (volatile uint32_t *)(((uint32_t)(uintptr_t)__flovl_vma_end + 3u) & ~3u);
@@ -213,8 +249,10 @@ bool firmware_flasher_write_row(uint32_t addr, const uint8_t *data, uint8_t cool
 
 /* DSU hardware CRC-32 (zlib variant); `data` 4-aligned, `len` a multiple of
  * 4, NVMCTRL idle. Used by the parser, the verifies, and (in ultrapatch
- * builds) the decoder TU's CRC32_DECODE hook. Also callable pre-arm from the
- * flash-resident launcher (ENTER pre-flight). */
+ * builds) the decoder TU's CRC32_DECODE hook. Like everything in the overlay
+ * it exists only once the overlay is loaded (first-block time), so the
+ * flash-resident launcher must NOT call it earlier: its ENTER pre-flight uses
+ * serial_frame_crc32() instead (same engine, same convention). */
 uint32_t firmware_flasher_crc32(const uint8_t *data, uint32_t len);
 
 /* RTC MODE0 COUNT32 ticks at 128 Hz (1024 Hz / DIV8; see rtc32.c). The core
@@ -251,7 +289,7 @@ void flasher_run(const firmware_flasher_patch_t *patch,
  *
  * Called by flasher_run once the byte source is primed with the first body
  * frame (not yet ACKed). Pull the compressed body via patch_pull_byte(),
- * reconstruct NEW in [pd->base, pd->base + pd->to_size) with
+ * reconstruct NEW in [pd->base_addr, pd->base_addr + pd->new_size) with
  * firmware_flasher_write_row(), and return true once the image is fully
  * written. Return false on ANY failure -- corrupt stream, write error, or a
  * pull-source abort (takeover) -- withOUT ACKing the current frame; the

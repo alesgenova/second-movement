@@ -42,7 +42,7 @@
  * ENTER's descriptor (firmware_flasher_patch_t). s_aux is the sliding source
  * window; NULL = in-flash shift fallback. Statics (not locals) so every
  * helper reaches them from one base register on the M0+. */
-static uint8_t *s_aux;        /* detools: aux window; ultrapatch: decoder state     */
+static uint8_t *s_aux;        /* sliding source window (NULL = in-flash shift)      */
 static uint32_t s_aux_mask;   /* window size - 1 (mask, since no division here)     */
 static uint32_t s_pbase;      /* app base of the images                             */
 static uint32_t s_pfrom;      /* REF extent (source bound)                          */
@@ -59,10 +59,10 @@ static uint32_t s_pshift;     /* detools shift_size (the patch's read-coord orig
  *  row at a time into a RAM buffer, then erase+written. Source bytes (original
  *  REF) come from flash where the row hasn't been overwritten yet, else from a
  *  sliding "aux window" of the last shift_size original bytes (saved just
- *  before each row is overwritten), or -- when malloc could not size the
- *  window -- from a one-shot in-flash relocation of REF (s_aux == NULL). No
- *  row is erased twice. The window is the malloc'd buffer the launcher passed
- *  (we never malloc/free in .ramfunc).
+ *  before each row is overwritten), or -- when the window does not fit below
+ *  the overlay -- from a one-shot in-flash relocation of REF (s_aux == NULL).
+ *  No row is erased twice. The window is the buffer the launcher placed at the
+ *  start of Movement's (dead) heap; nothing here allocates or frees.
  *
  *  Two varint encodings are in play: crle's own (unsigned, 7-bit LSB groups)
  *  for its run lengths, and detools' signed varint (6-bit first byte) for the
@@ -216,8 +216,8 @@ static bool patch_shift_ref(void) {
  * the reboot, in the main loop). */
 bool patch_backend_run(const firmware_flasher_patch_t *pd) {
     s_aux = pd->aux; s_aux_mask = pd->aux_mask;
-    s_pbase = pd->base; s_pfrom = pd->from_size;
-    s_pto = pd->to_size; s_pshift = pd->shift_size;
+    s_pbase = pd->base_addr; s_pfrom = pd->ref_size;    /* detools' own terms: from = ref, to = new */
+    s_pto = pd->new_size; s_pshift = pd->shift_size;
     s_pull_end = false;
     bool shift_mode = (s_aux == NULL);
     /* In-flash shift fallback: place REF flush against the app-flash end (the

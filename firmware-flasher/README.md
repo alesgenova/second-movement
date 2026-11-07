@@ -34,12 +34,16 @@ code. RAM TUs may not call anything outside themselves (libc/libgcc live in
 flash); `flasher-rules.mk`'s stamp rules fail the build if a banned symbol
 appears.
 
-UltraPatch needs a separate `PatchApply` state of about 6.7 KiB. If it cannot
-fit above Movement's current heap break and below the overlay, the launcher
-places it at the aligned linker `end` (the original heap base), provided it
-still fits below the overlay with 512 bytes of margin. The first patch frame
-may still live in that heap: `flasher_run` copies it into the overlay before
-the decoder initializes `PatchApply`. Movement and its heap allocations never
+UltraPatch needs a separate `PatchApply` state of about 6.7 KiB. The launcher
+always places it at the aligned linker `end` (the start of Movement's heap,
+which is dead once the flasher takes over), provided it fits below the
+overlay; it never uses malloc, and it never goes below `end`, where
+Movement's globals include the USB endpoint table the USB hardware reads on
+its own. Before loading the
+overlay, the hand-off copies the link settings and the first data block onto
+the stack, so neither the overlay copy nor `PatchApply` can clobber them
+(`flasher_run` also copies a first patch frame into the overlay before the
+decoder initializes `PatchApply`). Movement and its heap allocations never
 run again after the hand-off. If even the original heap window is too small,
 the patch parks without an ACK and a block-0 full flash can recover over IR.
 
